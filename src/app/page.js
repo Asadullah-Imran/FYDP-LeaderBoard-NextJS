@@ -274,7 +274,7 @@ export default function Dashboard() {
       ) : (
         <div className="space-y-12">
           {/* Overall Performance Chart Card */}
-          {overallPerf.length > 0 && (
+          {overallPerf.length > 0 && !searchQuery && (
             <div className="bg-surface-container-lowest border border-outline-border rounded-lg p-6 md:p-8 shadow-sm relative overflow-hidden transition-all duration-300">
               <div className="absolute top-0 left-0 right-0 h-1 bg-gradient-to-r from-primary via-primary-container to-secondary"></div>
               
