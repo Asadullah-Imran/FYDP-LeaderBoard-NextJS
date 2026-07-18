@@ -7,6 +7,7 @@ import { useData } from '@/context/DataContext';
 export default function Dashboard() {
   const { sections, models, globalLoading: loading, fetchGlobalData } = useData();
   const [metricTab, setMetricTab] = useState('ARI'); // 'ARI' | 'NMI' | 'Silhouette'
+  const [selectedDatasetFilter, setSelectedDatasetFilter] = useState('all'); // 'all' | datasetSectionId
 
   useEffect(() => {
     fetchGlobalData();
@@ -21,6 +22,11 @@ export default function Dashboard() {
     const performances = {};
     models.forEach(model => {
       if (!model.results || model.results.length === 0) return;
+      
+      // Filter by dataset if not set to 'all'
+      if (selectedDatasetFilter !== 'all' && model.datasetSectionId?._id !== selectedDatasetFilter) {
+        return;
+      }
       
       const modelName = model.name.trim();
       model.results.forEach(res => {
@@ -205,29 +211,48 @@ export default function Dashboard() {
                   </p>
                 </div>
                 
-                {/* Metric Selector Tabs */}
-                <div className="flex bg-surface-container-low p-1 rounded-default border border-outline-border self-start md:self-auto shrink-0">
-                  {['ARI', 'NMI', 'Silhouette'].map((metric) => {
-                    const isActive = metricTab === metric;
-                    let activeBtnStyle = 'bg-primary text-white shadow-sm';
-                    if (metric === 'NMI') activeBtnStyle = 'bg-secondary text-white shadow-sm';
-                    if (metric === 'Silhouette') activeBtnStyle = 'bg-tertiary text-white shadow-sm';
-                    
-                    return (
-                      <button
-                        key={metric}
-                        type="button"
-                        onClick={() => setMetricTab(metric)}
-                        className={`px-4 py-1.5 rounded-default text-xs font-bold uppercase tracking-wider cursor-pointer transition-all ${
-                          isActive
-                            ? activeBtnStyle
-                            : 'text-on-surface-variant hover:text-on-surface hover:bg-surface-container-high'
-                        }`}
-                      >
-                        {metric}
-                      </button>
-                    );
-                  })}
+                <div className="flex flex-col sm:flex-row gap-3 items-start sm:items-center self-start md:self-auto">
+                  {/* Dataset Selector Dropdown */}
+                  <div className="flex items-center gap-1.5 bg-surface-container-low px-3 py-1.5 rounded-default border border-outline-border self-stretch sm:self-auto">
+                    <span className="text-[10px] uppercase font-bold text-on-surface-variant font-outfit shrink-0">Dataset:</span>
+                    <select
+                      value={selectedDatasetFilter}
+                      onChange={(e) => setSelectedDatasetFilter(e.target.value)}
+                      className="bg-transparent text-xs font-bold text-on-surface focus:outline-none cursor-pointer pr-1 w-full sm:w-auto"
+                    >
+                      <option value="all">All Datasets ({nonEmptySections.length})</option>
+                      {nonEmptySections.map(sec => (
+                        <option key={sec._id} value={sec._id}>
+                          {sec.name}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+
+                  {/* Metric Selector Tabs */}
+                  <div className="flex bg-surface-container-low p-1 rounded-default border border-outline-border self-stretch sm:self-auto shrink-0 justify-center">
+                    {['ARI', 'NMI', 'Silhouette'].map((metric) => {
+                      const isActive = metricTab === metric;
+                      let activeBtnStyle = 'bg-primary text-white shadow-sm';
+                      if (metric === 'NMI') activeBtnStyle = 'bg-secondary text-white shadow-sm';
+                      if (metric === 'Silhouette') activeBtnStyle = 'bg-tertiary text-white shadow-sm';
+                      
+                      return (
+                        <button
+                          key={metric}
+                          type="button"
+                          onClick={() => setMetricTab(metric)}
+                          className={`px-4 py-1.5 rounded-default text-xs font-bold uppercase tracking-wider cursor-pointer transition-all ${
+                            isActive
+                              ? activeBtnStyle
+                              : 'text-on-surface-variant hover:text-on-surface hover:bg-surface-container-high'
+                          }`}
+                        >
+                          {metric}
+                        </button>
+                      );
+                    })}
+                  </div>
                 </div>
               </div>
 

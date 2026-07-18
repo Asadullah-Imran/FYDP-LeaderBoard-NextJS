@@ -60,6 +60,7 @@ Captures model evaluation reports, metrics, pipeline graphs, and uploaded source
   - `scoreAMI` (Number)
   - `scoreHomogeneity` (Number)
   - `scoreVMeasure` (Number)
+  - `visible` (Boolean, default: `true`): Visibility state configuration. Allows authors to hide specific configurations from the leaderboard.
 - **ModelSubmission Schema**:
   - `name` (String, required): Algorithm/Submission name.
   - `authorId` (ObjectId, ref: `'User'`, required): Creator reference.
@@ -70,7 +71,7 @@ Captures model evaluation reports, metrics, pipeline graphs, and uploaded source
   - `architectureFlow` (String, optional): Mermaid.js diagram code.
   - `githubUrl` (String, optional): Code repository URL.
 - **Legacy Fallback Hooks**:
-  - `post('init')`: Detects legacy submission columns (`clusterSize`, `scoreARI`, etc.) and dynamically builds a results array entry for backward database compatibility.
+  - `post('init')`: Detects legacy submission columns (`clusterSize`, `scoreARI`, etc.) and dynamically builds a results array entry containing `visible: true` for backward database compatibility.
   - `pre('validate')`: Validates that at least one cluster evaluation exists, sizes are unique positive integers, and at least two of the primary metrics (`scoreARI`, `scoreNMI`, `scoreSilhouette`) are provided.
 
 ---
@@ -145,7 +146,7 @@ sequenceDiagram
     UI->>ModelAPI: POST JSON (modelPayload: results, markdown, images, flows, repo url)
     ModelAPI->>Auth: verifyAuth(req)
     Auth-->>ModelAPI: Current User Object
-    ModelAPI->>ModelAPI: Map Results Array (Parse clusterSize as Int, scores as Float)
+    ModelAPI->>ModelAPI: Map Results Array (Parse clusterSize as Int, scores as Float, map visible defaults)
     ModelAPI->>DB: Save ModelSubmission Document
     DB-->>ModelAPI: Created Document
     ModelAPI-->>UI: Response 201 Created
@@ -163,7 +164,7 @@ sequenceDiagram
 ---
 
 ### Scenario C: Dashboard Leaderboard Fetch & Ranking Flow
-Retrieves data dynamically, processes multi-resolution evaluations, and ranks algorithms.
+Retrieves data dynamically, filters visibility status, and ranks algorithms.
 
 ```mermaid
 graph TD
@@ -173,8 +174,10 @@ graph TD
   IterateSections --> Filter[Find models where datasetSectionId matches section]
   Filter --> CheckResults{Has results array?}
   
-  CheckResults -- Yes --> Flatten[Flatten Results: create independent row entry per clusterSize evaluation]
-  CheckResults -- No --> LegacyFallback[Build single fallback evaluation row using legacy root columns]
+  CheckResults -- Yes --> LoopResults[Loop through results array]
+  LoopResults -- res.visible === false --> Skip[Skip / Exclude from Dashboard]
+  LoopResults -- res.visible !== false --> Flatten[Flatten Results: create independent row entry]
+  CheckResults -- No --> LegacyFallback[Build single fallback evaluation row]
   
   Flatten --> Sort[Sort Rows: Sort descending by ARI, then by NMI, then by Silhouette]
   LegacyFallback --> Sort
@@ -184,7 +187,8 @@ graph TD
 ```
 
 1. **Global Fetch**: On dashboard load (`src/app/page.js`), `DataContext.fetchGlobalData()` calls `GET /api/sections` and `GET /api/models` concurrently using `Promise.all`.
-2. **Data Flattening**: The leaderboard loops through each section and queries associated models. Since submissions evaluate models across *multiple* cluster configurations, each cluster element inside the `results` array is extracted and flattened into independent leaderboard entries:
+2. **Visibility Check**: When rendering individual dataset leaderboards, the system maps model evaluations. If an evaluation config has `visible === false`, it is ignored and excluded from the row lists.
+3. **Data Flattening**: Active configurations are flattened into independent row entries:
    ```javascript
    {
      _id: model._id,
@@ -196,11 +200,11 @@ graph TD
      scoreSilhouette: res.scoreSilhouette
    }
    ```
-3. **Comparison sorting**: Rows under each dataset section are sorted dynamically:
+4. **Comparison sorting**: Rows under each dataset section are sorted dynamically:
    - Primary Sort: **ARI** (Adjusted Rand Index) descending.
    - Secondary Sort: **NMI** (Normalized Mutual Information) descending.
    - Tertiary Sort: **Silhouette Coefficient** descending.
-4. **Rank Designation**: Icons (Trophy, Medal, Badges) are assigned, and the list is rendered in a responsive CSS table layout.
+5. **Rank Designation**: Icons (Trophy, Medal, Badges) are assigned, and the list is rendered in a responsive CSS table layout.
 
 ---
 
@@ -216,12 +220,14 @@ graph TD
   RenderInstant --> InitVisuals[Trigger visualization renders]
   UpdateCache --> InitVisuals
   
+  InitVisuals --> FilterResults[Filter Results array: hide invisible configs unless user is Author/Admin]
   InitVisuals --> MarkdownMath[ReactMarkdown parses formulas: e.g. $$E=mc^2$$ via rehype-katex]
   InitVisuals --> MermaidParse[Mermaid.js parses flow schema via contentLoaded]
   InitVisuals --> LoadGallery[Images load directly from Cloudinary CDN]
 ```
 
 - **Caching**: The client first checks if the model is cached inside `DataContext.modelDetails[id]`. If missing, it dispatches a GET request to `/api/models/[id]`.
+- **Visibility Filtration**: The client calculates `displayResults` and filters out configs where `visible === false` unless the viewer is authorized to edit the submission (author or admin). Authors/admins see hidden configs marked with a "Hidden from Dashboard" badge.
 - **LaTeX Math Rendering**: `react-markdown` combines with `remark-math` and `rehype-katex` to transform equations (enclosed in `$$` or `$`) into interactive LaTeX formulas.
 - **Mermaid Graph Initialization**: Upon initial render, the client triggers `mermaid.initialize()` and `mermaid.contentLoaded()` to compile raw string flowcharts (e.g., `graph TD; A --> B;`) into interactive pipeline SVGs.
 
@@ -247,7 +253,79 @@ graph LR
 
 - **Authentication Guard**: Admin routes check `currentUser.role === 'admin'`. Unauthorized requests trigger automatic redirection.
 - **Cascade Deletion**: When an administrator deletes a `DatasetSection`, the backend executes `ModelSubmission.deleteMany({ datasetSectionId: section._id })` before deleting the section itself, ensuring no orphaned metrics exist in MongoDB.
-- **Privilege Management**: Admins can promote/demote researcher accounts (`role: 'admin'` / `'member'`) or delete user accounts (except their own), displaying alert confirmations prior to DB mutation.
+- **Hidden Badges**: The Admin dashboard lists all submissions. If an evaluation config has `visible === false`, the list displays an `EyeOff` "Hidden" badge next to the entry name.
+
+---
+
+### Scenario F: Overall Model Performance Aggregation
+Computes aggregated metrics and displays system-wide performance comparison statistics with metric tabs and dataset filter selections.
+
+```mermaid
+sequenceDiagram
+    autonumber
+    actor User as Researcher
+    participant UI as Dashboard Page (Client)
+    participant DataCtx as DataContext (Client)
+    
+    User->>UI: Selects Metric Tab (ARI, NMI, or Silhouette) or Dataset Filter Option
+    UI->>UI: Trigger getOverallPerformance()
+    
+    loop Group Models by Name
+        UI->>UI: Filter out models not matching selected Dataset Filter (if not 'all')
+        UI->>UI: Filter out hidden configs (visible === false)
+        UI->>UI: Group remaining visible scores by exact Model Name
+      end
+    
+    UI->>UI: Compute averages for ARI, NMI, & Silhouette per unique Model Name
+    UI->>UI: Count datasets where model has entries
+    UI->>UI: Sort aggregated list descending based on selected Metric Tab
+    UI->>UI: Render custom horizontal bar charts with percentages
+```
+
+1. **Aggregation Process**: On dashboard render, the client triggers `getOverallPerformance()`, which scans all model submissions loaded inside `DataContext`.
+2. **Dataset Filtering**: If `selectedDatasetFilter` is not set to `'all'`, submissions that do not match the selected dataset ID are excluded from the comparison calculations.
+3. **Grouping by Name**: It groups visible configurations (`visible !== false`) by their exact name string, gathering all scores (ARI, NMI, Silhouette) and mapping unique dataset section IDs.
+4. **Averages Calculation**: Averages are computed for each metric.
+5. **Interactive Sorting**: The resulting model comparison list is sorted descending based on the active selected metric tab (`ARI`, `NMI`, or `Silhouette`).
+6. **Horizontal Progress Gauges**: Displayed as custom SVG/CSS progress bars. The leader holds a Trophy badge.
+
+---
+
+### Scenario G: Evaluation Visibility Toggle (Author-Only)
+Allows model creators to hide/unhide specific cluster configurations directly from the detail views.
+
+```mermaid
+sequenceDiagram
+    autonumber
+    actor Creator as Model Creator
+    participant UI as Details Page (Client)
+    participant ModelAPI as /api/models/[id] (API Route)
+    participant DB as MongoDB (ModelSubmission Schema)
+    
+    Creator->>UI: Clicks Eye/EyeOff toggle icon
+    UI->>UI: Set togglingSize = clusterSize
+    UI->>UI: Disable toggle button & render spinning RefreshCw icon
+    UI->>ModelAPI: PUT JSON (results: updatedResults)
+    ModelAPI->>ModelAPI: Validate session user matches authorId
+    
+    alt Authorized
+        ModelAPI->>DB: Save updated model results document
+        DB-->>ModelAPI: Populated Document
+        ModelAPI-->>UI: Response 200 OK (updated model)
+        UI->>UI: Update model details & cache in DataContext
+        UI->>UI: Reset togglingSize = null
+    else Unauthorized
+        ModelAPI-->>UI: Response 401 Unauthorized
+        UI->>UI: Show Alert Error (PopupContext)
+        UI->>UI: Reset togglingSize = null
+    end
+```
+
+1. **Author Check**: The details page evaluates `isAuthor` (`currentUser._id === model.authorId`). If true, an interactive Eye toggle button is rendered.
+2. **Spinner Toggle**: Upon clicking the eye icon, the client sets `togglingSize` to the target cluster size, disabling the button and displaying an animated loading spinner (`RefreshCw`).
+3. **Database Save**: A PUT request `/api/models/[id]` is dispatched to the backend containing the toggled results array.
+4. **Backend Guard**: The backend route verify authorization tokens, checks that `model.authorId` matches the session user, updates the results document, and returns the populated model object.
+5. **UI Update**: Client updates local state and cached datasets, then clears the `togglingSize` state to restore normal rendering views.
 
 ---
 
