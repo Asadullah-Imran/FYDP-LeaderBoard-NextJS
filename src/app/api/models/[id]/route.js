@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import connectDB from '@/lib/db';
 import ModelSubmission from '@/models/ModelSubmission';
+import ModelProfile from '@/models/ModelProfile';
 import { verifyAuth } from '@/lib/auth';
 import mongoose from 'mongoose';
 
@@ -14,11 +15,20 @@ export async function GET(req, { params }) {
     }
 
     const model = await ModelSubmission.findById(id)
+      .populate('modelProfileId')
       .populate('authorId', 'name')
       .populate('datasetSectionId', 'name');
 
     if (model) {
-      return NextResponse.json(model);
+      const obj = model.toObject();
+      if (obj.modelProfileId) {
+        obj.descriptionMarkdown = obj.modelProfileId.descriptionMarkdown || obj.descriptionMarkdown;
+        obj.architectureFlow = obj.modelProfileId.architectureFlow || obj.architectureFlow;
+        obj.methodologyImages = obj.modelProfileId.methodologyImages || obj.methodologyImages;
+        obj.githubUrl = obj.modelProfileId.githubUrl || obj.githubUrl;
+        obj.paperUrl = obj.modelProfileId.paperUrl || obj.paperUrl;
+      }
+      return NextResponse.json(obj);
     } else {
       return NextResponse.json({ message: 'Model not found' }, { status: 404 });
     }
@@ -84,38 +94,89 @@ export async function PUT(req, { params }) {
       })) : [];
     }
 
-    model.descriptionMarkdown = descriptionMarkdown !== undefined ? descriptionMarkdown : model.descriptionMarkdown;
-    model.methodologyImages = methodologyImages || model.methodologyImages;
-    model.architectureFlow = architectureFlow !== undefined ? architectureFlow : model.architectureFlow;
-    model.githubUrl = githubUrl !== undefined ? githubUrl : model.githubUrl;
+    // 1. Manage ModelProfile update
+    let profileId = model.modelProfileId;
+    if (profileId) {
+      const profile = await ModelProfile.findById(profileId);
+      if (profile) {
+        profile.name = name || profile.name;
+        profile.descriptionMarkdown = descriptionMarkdown !== undefined ? descriptionMarkdown : profile.descriptionMarkdown;
+        profile.methodologyImages = methodologyImages || profile.methodologyImages;
+        profile.architectureFlow = architectureFlow !== undefined ? architectureFlow : profile.architectureFlow;
+        profile.githubUrl = githubUrl !== undefined ? githubUrl : profile.githubUrl;
+        profile.paperUrl = paperUrl !== undefined ? paperUrl : profile.paperUrl;
+        await profile.save();
+      }
+    } else {
+      let profile = await ModelProfile.findOne({ name: (name || model.name).trim() });
+      if (!profile) {
+        profile = new ModelProfile({
+          name: (name || model.name).trim(),
+          descriptionMarkdown: descriptionMarkdown !== undefined ? descriptionMarkdown : (model.descriptionMarkdown || 'No description provided.'),
+          methodologyImages: methodologyImages || model.methodologyImages || [],
+          architectureFlow: architectureFlow !== undefined ? architectureFlow : model.architectureFlow || '',
+          githubUrl: githubUrl !== undefined ? githubUrl : model.githubUrl || '',
+          paperUrl: paperUrl !== undefined ? paperUrl : model.paperUrl || ''
+        });
+        await profile.save();
+      }
+      model.modelProfileId = profile._id;
+      profileId = profile._id;
+    }
+
+    // Set updated profile data onto the local model object (for fallback compatibility)
+    if (profileId) {
+      const profile = await ModelProfile.findById(profileId);
+      if (profile) {
+        model.name = profile.name;
+        model.descriptionMarkdown = profile.descriptionMarkdown;
+        model.methodologyImages = profile.methodologyImages;
+        model.architectureFlow = profile.architectureFlow;
+        model.githubUrl = profile.githubUrl;
+        model.paperUrl = profile.paperUrl;
+      }
+    }
+
     model.colabUrl = colabUrl !== undefined ? colabUrl : model.colabUrl;
     model.kaggleUrl = kaggleUrl !== undefined ? kaggleUrl : model.kaggleUrl;
-    model.paperUrl = paperUrl !== undefined ? paperUrl : model.paperUrl;
 
     const updatedModel = await model.save();
 
-    // Synchronize metadata changes to all other submissions sharing the same model name
-    if (oldName) {
-      await ModelSubmission.updateMany(
-        { name: oldName },
-        {
-          $set: {
-            name: updatedModel.name,
-            descriptionMarkdown: updatedModel.descriptionMarkdown,
-            methodologyImages: updatedModel.methodologyImages,
-            architectureFlow: updatedModel.architectureFlow,
-            githubUrl: updatedModel.githubUrl,
-            paperUrl: updatedModel.paperUrl
+    // 2. Synchronize all submissions sharing the same modelProfileId
+    if (profileId) {
+      const profile = await ModelProfile.findById(profileId);
+      if (profile) {
+        await ModelSubmission.updateMany(
+          { modelProfileId: profileId },
+          {
+            $set: {
+              name: profile.name,
+              descriptionMarkdown: profile.descriptionMarkdown,
+              methodologyImages: profile.methodologyImages,
+              architectureFlow: profile.architectureFlow,
+              githubUrl: profile.githubUrl,
+              paperUrl: profile.paperUrl
+            }
           }
-        }
-      );
+        );
+      }
     }
-    
+
     const populatedModel = await ModelSubmission.findById(updatedModel._id)
+      .populate('modelProfileId')
       .populate('authorId', 'name')
       .populate('datasetSectionId', 'name');
 
-    return NextResponse.json(populatedModel);
+    const obj = populatedModel.toObject();
+    if (obj.modelProfileId) {
+      obj.descriptionMarkdown = obj.modelProfileId.descriptionMarkdown || obj.descriptionMarkdown;
+      obj.architectureFlow = obj.modelProfileId.architectureFlow || obj.architectureFlow;
+      obj.methodologyImages = obj.modelProfileId.methodologyImages || obj.methodologyImages;
+      obj.githubUrl = obj.modelProfileId.githubUrl || obj.githubUrl;
+      obj.paperUrl = obj.modelProfileId.paperUrl || obj.paperUrl;
+    }
+
+    return NextResponse.json(obj);
   } catch (error) {
     console.error('Update model error:', error);
     if (error.name === 'ValidationError' || error.message.includes('Validation failed')) {

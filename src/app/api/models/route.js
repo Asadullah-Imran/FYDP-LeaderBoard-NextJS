@@ -2,14 +2,29 @@ import { NextResponse } from 'next/server';
 import connectDB from '@/lib/db';
 import ModelSubmission from '@/models/ModelSubmission';
 import { verifyAuth } from '@/lib/auth';
+import ModelProfile from '@/models/ModelProfile';
 
 export async function GET() {
   try {
     await connectDB();
     const models = await ModelSubmission.find({})
+      .populate('modelProfileId')
       .populate('authorId', 'name')
       .populate('datasetSectionId', 'name');
-    return NextResponse.json(models);
+      
+    const processedModels = models.map(m => {
+      const obj = m.toObject();
+      if (obj.modelProfileId) {
+        obj.descriptionMarkdown = obj.modelProfileId.descriptionMarkdown || obj.descriptionMarkdown;
+        obj.architectureFlow = obj.modelProfileId.architectureFlow || obj.architectureFlow;
+        obj.methodologyImages = obj.modelProfileId.methodologyImages || obj.methodologyImages;
+        obj.githubUrl = obj.modelProfileId.githubUrl || obj.githubUrl;
+        obj.paperUrl = obj.modelProfileId.paperUrl || obj.paperUrl;
+      }
+      return obj;
+    });
+
+    return NextResponse.json(processedModels);
   } catch (error) {
     console.error('Fetch models error:', error);
     return NextResponse.json({ message: 'Server error', error: error.message }, { status: 500 });
@@ -49,18 +64,32 @@ export async function POST(req) {
       visible: res.visible !== undefined ? !!res.visible : true,
     })) : [];
 
+    let profile = await ModelProfile.findOne({ name: name.trim() });
+    if (!profile) {
+      profile = new ModelProfile({
+        name: name.trim(),
+        descriptionMarkdown: descriptionMarkdown || 'No description provided.',
+        architectureFlow: architectureFlow || '',
+        methodologyImages: methodologyImages || [],
+        githubUrl: githubUrl || '',
+        paperUrl: paperUrl || ''
+      });
+      await profile.save();
+    }
+
     const model = new ModelSubmission({
-      name,
+      name: name.trim(),
+      modelProfileId: profile._id,
       authorId: currentUser._id,
       datasetSectionId,
       results: modelResults,
-      descriptionMarkdown,
-      methodologyImages,
-      architectureFlow,
-      githubUrl,
+      descriptionMarkdown: profile.descriptionMarkdown,
+      methodologyImages: profile.methodologyImages,
+      architectureFlow: profile.architectureFlow,
+      githubUrl: profile.githubUrl,
       colabUrl,
       kaggleUrl,
-      paperUrl
+      paperUrl: profile.paperUrl
     });
 
     const createdModel = await model.save();

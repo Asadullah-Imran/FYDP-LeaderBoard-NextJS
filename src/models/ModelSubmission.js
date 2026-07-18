@@ -1,6 +1,7 @@
 import mongoose from 'mongoose';
 import './User';
 import './DatasetSection';
+import './ModelProfile';
 
 const clusterResultSchema = new mongoose.Schema({
   clusterSize: { type: Number, required: true },
@@ -15,6 +16,11 @@ const clusterResultSchema = new mongoose.Schema({
 
 const modelSubmissionSchema = new mongoose.Schema({
   name: { type: String, required: true },
+  
+  modelProfileId: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'ModelProfile'
+  },
   
   authorId: { 
     type: mongoose.Schema.Types.ObjectId, 
@@ -45,7 +51,7 @@ const modelSubmissionSchema = new mongoose.Schema({
   clusterSize: { type: Number },
   
   // Parsed Artifacts & Uploads
-  descriptionMarkdown: { type: String, required: true }, // Markdown + LaTeX content
+  descriptionMarkdown: { type: String }, // Markdown + LaTeX content
   methodologyImages: [{ type: String }], // Array of image URLs for methodology
   architectureFlow: { type: String }, // Optional Mermaid.js syntax content
   githubUrl: { type: String }, // Optional link to source code
