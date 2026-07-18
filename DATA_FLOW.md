@@ -258,7 +258,7 @@ graph LR
 ---
 
 ### Scenario F: Overall Model Performance Aggregation
-Computes aggregated metrics and displays system-wide performance comparison statistics with metric tabs and dataset filter selections.
+Computes aggregated metrics and displays system-wide performance comparison statistics with metric tabs and multi-select dataset checkboxes.
 
 ```mermaid
 sequenceDiagram
@@ -267,11 +267,11 @@ sequenceDiagram
     participant UI as Dashboard Page (Client)
     participant DataCtx as DataContext (Client)
     
-    User->>UI: Selects Metric Tab (ARI, NMI, or Silhouette) or Dataset Filter Option
+    User->>UI: Toggles Metric Tab (ARI, NMI, Silhouette) or Checkbox Selection
     UI->>UI: Trigger getOverallPerformance()
     
     loop Group Models by Name
-        UI->>UI: Filter out models not matching selected Dataset Filter (if not 'all')
+        UI->>UI: Filter out models not matching any checked Dataset in selectedDatasets
         UI->>UI: Filter out hidden configs (visible === false)
         UI->>UI: Group remaining visible scores by exact Model Name
       end
@@ -283,7 +283,7 @@ sequenceDiagram
 ```
 
 1. **Aggregation Process**: On dashboard render, the client triggers `getOverallPerformance()`, which scans all model submissions loaded inside `DataContext`.
-2. **Dataset Filtering**: If `selectedDatasetFilter` is not set to `'all'`, submissions that do not match the selected dataset ID are excluded from the comparison calculations.
+2. **Dataset Filtering**: A custom multi-select checkbox dropdown holds a list of selected dataset IDs in `selectedDatasets`. Submissions that belong to datasets not checked by the researcher are dynamically excluded from overall scoring.
 3. **Grouping by Name**: It groups visible configurations (`visible !== false`) by their exact name string, gathering all scores (ARI, NMI, Silhouette) and mapping unique dataset section IDs.
 4. **Averages Calculation**: Averages are computed for each metric.
 5. **Interactive Sorting**: The resulting model comparison list is sorted descending based on the active selected metric tab (`ARI`, `NMI`, or `Silhouette`).

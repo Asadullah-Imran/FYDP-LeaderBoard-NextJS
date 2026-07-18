@@ -1,13 +1,18 @@
 'use client';
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useRef } from 'react';
 import Link from 'next/link';
-import { Trophy, Medal, ArrowRight, Sparkles, AlertCircle, Cpu, BarChart3 } from 'lucide-react';
+import { Trophy, Medal, ArrowRight, Sparkles, AlertCircle, Cpu, BarChart3, ChevronsUpDown } from 'lucide-react';
 import { useData } from '@/context/DataContext';
 
 export default function Dashboard() {
   const { sections, models, globalLoading: loading, fetchGlobalData } = useData();
   const [metricTab, setMetricTab] = useState('ARI'); // 'ARI' | 'NMI' | 'Silhouette'
-  const [selectedDatasetFilter, setSelectedDatasetFilter] = useState('all'); // 'all' | datasetSectionId
+  
+  // Multi-select dataset filters
+  const [selectedDatasets, setSelectedDatasets] = useState([]);
+  const [filterDropdownOpen, setFilterDropdownOpen] = useState(false);
+  const filterDropdownRef = useRef(null);
+  const hasInitializedFilter = useRef(false);
 
   useEffect(() => {
     fetchGlobalData();
@@ -17,14 +22,51 @@ export default function Dashboard() {
     models.some(m => m.datasetSectionId?._id === section._id)
   );
 
+  // Initialize selectedDatasets to select all nonEmptySections on load
+  useEffect(() => {
+    if (nonEmptySections.length > 0 && !hasInitializedFilter.current) {
+      setSelectedDatasets(nonEmptySections.map(s => s._id));
+      hasInitializedFilter.current = true;
+    }
+  }, [nonEmptySections]);
+
+  // Click outside dropdown handler
+  useEffect(() => {
+    function handleClickOutside(event) {
+      if (filterDropdownRef.current && !filterDropdownRef.current.contains(event.target)) {
+        setFilterDropdownOpen(false);
+      }
+    }
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
+
+  const toggleDatasetSelection = (id) => {
+    setSelectedDatasets(prev => {
+      if (prev.includes(id)) {
+        return prev.filter(item => item !== id);
+      } else {
+        return [...prev, id];
+      }
+    });
+  };
+
+  const toggleAllDatasets = () => {
+    if (selectedDatasets.length === nonEmptySections.length) {
+      setSelectedDatasets([]);
+    } else {
+      setSelectedDatasets(nonEmptySections.map(s => s._id));
+    }
+  };
+
   // Compute overall performance of models across all datasets
   const getOverallPerformance = () => {
     const performances = {};
     models.forEach(model => {
       if (!model.results || model.results.length === 0) return;
       
-      // Filter by dataset if not set to 'all'
-      if (selectedDatasetFilter !== 'all' && model.datasetSectionId?._id !== selectedDatasetFilter) {
+      // Filter by selected datasets list
+      if (!selectedDatasets.includes(model.datasetSectionId?._id)) {
         return;
       }
       
@@ -212,21 +254,58 @@ export default function Dashboard() {
                 </div>
                 
                 <div className="flex flex-col sm:flex-row gap-3 items-start sm:items-center self-start md:self-auto">
-                  {/* Dataset Selector Dropdown */}
-                  <div className="flex items-center gap-1.5 bg-surface-container-low px-3 py-1.5 rounded-default border border-outline-border self-stretch sm:self-auto">
-                    <span className="text-[10px] uppercase font-bold text-on-surface-variant font-outfit shrink-0">Dataset:</span>
-                    <select
-                      value={selectedDatasetFilter}
-                      onChange={(e) => setSelectedDatasetFilter(e.target.value)}
-                      className="bg-transparent text-xs font-bold text-on-surface focus:outline-none cursor-pointer pr-1 w-full sm:w-auto"
+                  {/* Multi-Select Dataset Checkbox Dropdown */}
+                  <div className="relative self-stretch sm:self-auto" ref={filterDropdownRef}>
+                    <button
+                      type="button"
+                      onClick={() => setFilterDropdownOpen(!filterDropdownOpen)}
+                      className="flex items-center justify-between bg-surface-container-low px-3 py-1.5 rounded-default border border-outline-border text-xs font-bold text-on-surface hover:border-primary cursor-pointer select-none gap-2 self-stretch sm:self-auto min-w-[170px] w-full sm:w-auto"
                     >
-                      <option value="all">All Datasets ({nonEmptySections.length})</option>
-                      {nonEmptySections.map(sec => (
-                        <option key={sec._id} value={sec._id}>
-                          {sec.name}
-                        </option>
-                      ))}
-                    </select>
+                      <span className="truncate max-w-[140px]">
+                        {selectedDatasets.length === nonEmptySections.length 
+                          ? 'All Datasets Selected' 
+                          : selectedDatasets.length === 0 
+                          ? 'No Datasets Selected' 
+                          : `${selectedDatasets.length} of ${nonEmptySections.length} Datasets`}
+                      </span>
+                      <ChevronsUpDown className="h-3.5 w-3.5 text-on-surface-variant shrink-0" />
+                    </button>
+
+                    {filterDropdownOpen && (
+                      <div className="absolute left-0 sm:right-0 sm:left-auto mt-1.5 z-50 w-64 bg-surface-container-lowest border border-outline-border rounded-default shadow-[0px_4px_20px_rgba(15,23,42,0.08)] overflow-hidden p-2.5 space-y-2 animate-in fade-in slide-in-from-top-1 duration-150">
+                        <div className="flex items-center justify-between px-1">
+                          <span className="text-[9px] uppercase font-extrabold text-on-surface-variant font-outfit">Filter Datasets</span>
+                          <button
+                            type="button"
+                            onClick={toggleAllDatasets}
+                            className="text-[9px] uppercase font-bold text-primary hover:underline cursor-pointer bg-transparent border-none p-0"
+                          >
+                            {selectedDatasets.length === nonEmptySections.length ? 'Deselect All' : 'Select All'}
+                          </button>
+                        </div>
+                        
+                        <div className="h-px bg-outline-border/60"></div>
+                        
+                        <ul className="max-h-56 overflow-y-auto space-y-0.5 pr-1">
+                          {nonEmptySections.map((sec) => {
+                            const isChecked = selectedDatasets.includes(sec._id);
+                            return (
+                              <li key={sec._id}>
+                                <label className="flex items-center gap-2.5 px-2 py-1.5 rounded-default hover:bg-surface-container-low cursor-pointer text-xs font-semibold text-on-surface select-none transition-colors">
+                                  <input
+                                    type="checkbox"
+                                    checked={isChecked}
+                                    onChange={() => toggleDatasetSelection(sec._id)}
+                                    className="h-3.5 w-3.5 accent-primary cursor-pointer rounded border-outline-border"
+                                  />
+                                  <span className="truncate">{sec.name}</span>
+                                </label>
+                              </li>
+                            );
+                          })}
+                        </ul>
+                      </div>
+                    )}
                   </div>
 
                   {/* Metric Selector Tabs */}
