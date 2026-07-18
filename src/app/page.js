@@ -1,11 +1,12 @@
 'use client';
-import React, { useEffect } from 'react';
+import React, { useEffect, useState } from 'react';
 import Link from 'next/link';
-import { Trophy, Medal, ArrowRight, Sparkles, AlertCircle, Cpu } from 'lucide-react';
+import { Trophy, Medal, ArrowRight, Sparkles, AlertCircle, Cpu, BarChart3 } from 'lucide-react';
 import { useData } from '@/context/DataContext';
 
 export default function Dashboard() {
   const { sections, models, globalLoading: loading, fetchGlobalData } = useData();
+  const [metricTab, setMetricTab] = useState('ARI'); // 'ARI' | 'NMI' | 'Silhouette'
 
   useEffect(() => {
     fetchGlobalData();
@@ -14,6 +15,58 @@ export default function Dashboard() {
   const nonEmptySections = sections.filter(section => 
     models.some(m => m.datasetSectionId?._id === section._id)
   );
+
+  // Compute overall performance of models across all datasets
+  const getOverallPerformance = () => {
+    const performances = {};
+    models.forEach(model => {
+      if (!model.results || model.results.length === 0) return;
+      
+      const modelName = model.name.trim();
+      model.results.forEach(res => {
+        if (res.visible === false) return;
+        
+        if (!performances[modelName]) {
+          performances[modelName] = {
+            name: modelName,
+            ariScores: [],
+            nmiScores: [],
+            silScores: [],
+            datasetIds: new Set()
+          };
+        }
+        
+        const entry = performances[modelName];
+        if (res.scoreARI !== undefined && res.scoreARI !== null) entry.ariScores.push(res.scoreARI);
+        if (res.scoreNMI !== undefined && res.scoreNMI !== null) entry.nmiScores.push(res.scoreNMI);
+        if (res.scoreSilhouette !== undefined && res.scoreSilhouette !== null) entry.silScores.push(res.scoreSilhouette);
+        if (model.datasetSectionId?._id) {
+          entry.datasetIds.add(model.datasetSectionId._id);
+        }
+      });
+    });
+
+    return Object.values(performances).map(entry => {
+      const avgARI = entry.ariScores.length > 0 ? (entry.ariScores.reduce((sum, v) => sum + v, 0) / entry.ariScores.length) : 0;
+      const avgNMI = entry.nmiScores.length > 0 ? (entry.nmiScores.reduce((sum, v) => sum + v, 0) / entry.nmiScores.length) : 0;
+      const avgSil = entry.silScores.length > 0 ? (entry.silScores.reduce((sum, v) => sum + v, 0) / entry.silScores.length) : 0;
+      
+      return {
+        name: entry.name,
+        avgARI,
+        avgNMI,
+        avgSil,
+        datasetCount: entry.datasetIds.size,
+        evalCount: entry.ariScores.length + entry.nmiScores.length + entry.silScores.length
+      };
+    }).sort((a, b) => {
+      const valA = metricTab === 'ARI' ? a.avgARI : metricTab === 'NMI' ? a.avgNMI : a.avgSil;
+      const valB = metricTab === 'ARI' ? b.avgARI : metricTab === 'NMI' ? b.avgNMI : b.avgSil;
+      return valB - valA;
+    });
+  };
+
+  const overallPerf = getOverallPerformance();
 
   return (
     <div className="w-full space-y-12">
@@ -136,6 +189,113 @@ export default function Dashboard() {
         </div>
       ) : (
         <div className="space-y-12">
+          {/* Overall Performance Chart Card */}
+          {overallPerf.length > 0 && (
+            <div className="bg-surface-container-lowest border border-outline-border rounded-lg p-6 md:p-8 shadow-sm relative overflow-hidden transition-all duration-300">
+              <div className="absolute top-0 left-0 right-0 h-1 bg-gradient-to-r from-primary via-primary-container to-secondary"></div>
+              
+              <div className="flex flex-col md:flex-row md:items-center justify-between gap-6 mb-8">
+                <div className="space-y-1.5">
+                  <h2 className="text-xl md:text-2xl font-bold text-on-surface flex items-center gap-2.5 font-outfit">
+                    <BarChart3 className="h-5.5 w-5.5 text-primary" />
+                    Overall Model Performance
+                  </h2>
+                  <p className="text-xs text-on-surface-variant leading-normal max-w-xl">
+                    Aggregated benchmarks comparison of model submissions across all dataset categories, sorted by their average metric scores.
+                  </p>
+                </div>
+                
+                {/* Metric Selector Tabs */}
+                <div className="flex bg-surface-container-low p-1 rounded-default border border-outline-border self-start md:self-auto shrink-0">
+                  {['ARI', 'NMI', 'Silhouette'].map((metric) => {
+                    const isActive = metricTab === metric;
+                    let activeBtnStyle = 'bg-primary text-white shadow-sm';
+                    if (metric === 'NMI') activeBtnStyle = 'bg-secondary text-white shadow-sm';
+                    if (metric === 'Silhouette') activeBtnStyle = 'bg-tertiary text-white shadow-sm';
+                    
+                    return (
+                      <button
+                        key={metric}
+                        type="button"
+                        onClick={() => setMetricTab(metric)}
+                        className={`px-4 py-1.5 rounded-default text-xs font-bold uppercase tracking-wider cursor-pointer transition-all ${
+                          isActive
+                            ? activeBtnStyle
+                            : 'text-on-surface-variant hover:text-on-surface hover:bg-surface-container-high'
+                        }`}
+                      >
+                        {metric}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+
+              {/* Chart Bar List */}
+              <div className="space-y-4 max-w-3xl">
+                {overallPerf.map((perf, index) => {
+                  const score = metricTab === 'ARI' ? perf.avgARI : metricTab === 'NMI' ? perf.avgNMI : perf.avgSil;
+                  const percentage = Math.min(Math.max(score * 100, 0), 100);
+                  
+                  let barColorClass = 'bg-primary';
+                  if (metricTab === 'NMI') barColorClass = 'bg-secondary';
+                  if (metricTab === 'Silhouette') barColorClass = 'bg-tertiary';
+
+                  return (
+                    <div 
+                      key={perf.name} 
+                      className="group flex flex-col sm:flex-row sm:items-center justify-between gap-3 sm:gap-4 p-3.5 rounded-default border border-outline-border/40 bg-surface-container-low/20 hover:bg-primary-container/[0.03] hover:border-outline-border transition-all"
+                    >
+                      <div className="flex items-center gap-3 min-w-[200px] shrink-0">
+                        {/* Rank Badge */}
+                        <span className={`h-6.5 w-6.5 rounded-full flex items-center justify-center text-[10px] font-extrabold shrink-0 border ${
+                          index === 0 
+                            ? 'bg-tertiary-container/10 border-tertiary-container/30 text-tertiary' 
+                            : index === 1 
+                            ? 'bg-secondary-container text-on-secondary-container border-secondary-container/40' 
+                            : index === 2 
+                            ? 'bg-surface-container-high text-on-surface-variant border-outline' 
+                            : 'bg-surface-container-lowest text-on-surface-variant border-outline-border'
+                        }`}>
+                          {index === 0 ? (
+                            <Trophy className="h-3 w-3 text-tertiary" />
+                          ) : (
+                            index + 1
+                          )}
+                        </span>
+                        
+                        <div className="space-y-0.5 min-w-0">
+                          <h4 className="text-sm font-bold text-on-surface truncate flex items-center gap-1.5">
+                            <Cpu className="h-3.5 w-3.5 text-on-surface-variant/70 shrink-0" />
+                            {perf.name}
+                          </h4>
+                          <p className="text-[10px] text-on-surface-variant font-medium">
+                            {perf.datasetCount} {perf.datasetCount === 1 ? 'Dataset' : 'Datasets'} Benchmarked
+                          </p>
+                        </div>
+                      </div>
+
+                      {/* Bar Gauge */}
+                      <div className="flex-1 w-full">
+                        <div className="h-3 bg-surface-container-low rounded-full overflow-hidden border border-outline-border/40 relative shadow-inner">
+                          <div 
+                            style={{ width: `${percentage}%` }}
+                            className={`h-full rounded-full transition-all duration-500 ease-out shadow-xs ${barColorClass}`}
+                          ></div>
+                        </div>
+                      </div>
+
+                      {/* Numeric Value */}
+                      <div className="min-w-[64px] text-right font-mono font-bold text-sm text-on-surface shrink-0">
+                        {score !== null && score !== undefined ? score.toFixed(3) : '0.000'}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          )}
+
           {nonEmptySections.map(section => {
             const sectionModels = [];
             models.forEach(model => {
