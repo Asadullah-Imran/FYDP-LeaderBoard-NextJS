@@ -143,6 +143,8 @@ export default function Dashboard() {
               
               if (model.results && model.results.length > 0) {
                 model.results.forEach(res => {
+                  if (res.visible === false) return; // Skip if explicitly hidden
+                  
                   sectionModels.push({
                     _id: model._id,
                     resultKey: `${model._id}-${res.clusterSize}`,

@@ -20,7 +20,8 @@ import {
   CheckCircle,
   FileText,
   Clock,
-  RefreshCw
+  RefreshCw,
+  EyeOff
 } from 'lucide-react';
 import { useAuth } from '@/context/AuthContext';
 import { usePopup } from '@/context/PopupContext';
@@ -271,7 +272,8 @@ export default function AdminPanel() {
           scoreSilhouette: res.scoreSilhouette,
           scoreAMI: res.scoreAMI,
           scoreHomogeneity: res.scoreHomogeneity,
-          scoreVMeasure: res.scoreVMeasure
+          scoreVMeasure: res.scoreVMeasure,
+          visible: res.visible !== false
         });
       });
     } else {
@@ -287,7 +289,8 @@ export default function AdminPanel() {
         scoreSilhouette: model.scoreSilhouette,
         scoreAMI: model.scoreAMI,
         scoreHomogeneity: model.scoreHomogeneity,
-        scoreVMeasure: model.scoreVMeasure
+        scoreVMeasure: model.scoreVMeasure,
+        visible: true
       });
     }
   });
@@ -713,9 +716,17 @@ export default function AdminPanel() {
                   ) : (
                     filteredModels.map((item) => (
                       <tr key={item.resultKey} className="hover:bg-primary/5 transition-colors">
-                        <td className="px-4 py-3 font-bold text-on-surface text-xs sm:text-sm flex items-center gap-2">
-                          <Cpu className="h-4 w-4 text-primary shrink-0" />
-                          <span className="truncate max-w-[120px] sm:max-w-none">{item.name}</span>
+                        <td className="px-4 py-3 font-bold text-on-surface text-xs sm:text-sm flex items-center flex-wrap gap-2">
+                          <div className="flex items-center gap-2">
+                            <Cpu className="h-4 w-4 text-primary shrink-0" />
+                            <span className="truncate max-w-[120px] sm:max-w-none">{item.name}</span>
+                          </div>
+                          {item.visible === false && (
+                            <span className="inline-flex items-center gap-0.5 px-2 py-0.5 rounded-full text-[9px] font-bold bg-error-container/20 text-error border border-error-container/30">
+                              <EyeOff className="h-2.5 w-2.5" />
+                              Hidden
+                            </span>
+                          )}
                         </td>
                         <td className="px-4 py-3 text-center font-mono font-bold text-secondary text-xs sm:text-sm">
                           {item.clusterSize !== undefined && item.clusterSize !== null ? item.clusterSize : '-'}

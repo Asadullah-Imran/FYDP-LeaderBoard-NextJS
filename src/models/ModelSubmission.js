@@ -10,6 +10,7 @@ const clusterResultSchema = new mongoose.Schema({
   scoreAMI: { type: Number },
   scoreHomogeneity: { type: Number },
   scoreVMeasure: { type: Number },
+  visible: { type: Boolean, default: true }
 }, { _id: false });
 
 const modelSubmissionSchema = new mongoose.Schema({
@@ -61,7 +62,8 @@ modelSubmissionSchema.post('init', function(doc) {
       scoreSilhouette: doc.scoreSilhouette,
       scoreAMI: doc.scoreAMI,
       scoreHomogeneity: doc.scoreHomogeneity,
-      scoreVMeasure: doc.scoreVMeasure
+      scoreVMeasure: doc.scoreVMeasure,
+      visible: true
     }];
   }
 });

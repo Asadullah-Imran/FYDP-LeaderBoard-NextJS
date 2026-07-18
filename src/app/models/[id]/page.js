@@ -11,7 +11,7 @@ import mermaid from 'mermaid';
 import { useAuth } from '@/context/AuthContext';
 import { usePopup } from '@/context/PopupContext';
 import { useData } from '@/context/DataContext';
-import { Edit2, Trash2, Check, X, Eye, Edit3, ChevronsUpDown, Search, Image, ArrowLeft, Cpu, Layers, BookOpen, AlertTriangle, Code, ExternalLink, Info } from 'lucide-react';
+import { Edit2, Trash2, Check, X, Eye, EyeOff, Edit3, ChevronsUpDown, Search, Image, ArrowLeft, Cpu, Layers, BookOpen, AlertTriangle, Code, ExternalLink, Info } from 'lucide-react';
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || '/api';
 
@@ -180,6 +180,7 @@ export default function ModelDetail() {
   }
 
   const canManage = user && (user._id === model.authorId?._id || user._id === model.authorId || user.role === 'admin');
+  const isAuthor = user && (user._id === model.authorId?._id || user._id === model.authorId);
 
   const startEditing = () => {
     setEditData({
@@ -200,6 +201,7 @@ export default function ModelDetail() {
           scoreAMI: res.scoreAMI !== undefined && res.scoreAMI !== null ? res.scoreAMI.toString() : '',
           scoreHomogeneity: res.scoreHomogeneity !== undefined && res.scoreHomogeneity !== null ? res.scoreHomogeneity.toString() : '',
           scoreVMeasure: res.scoreVMeasure !== undefined && res.scoreVMeasure !== null ? res.scoreVMeasure.toString() : '',
+          visible: res.visible !== false
         }))
       : [{
           clusterSize: model.clusterSize !== undefined && model.clusterSize !== null ? model.clusterSize.toString() : '',
@@ -209,6 +211,7 @@ export default function ModelDetail() {
           scoreAMI: model.scoreAMI !== undefined && model.scoreAMI !== null ? model.scoreAMI.toString() : '',
           scoreHomogeneity: model.scoreHomogeneity !== undefined && model.scoreHomogeneity !== null ? model.scoreHomogeneity.toString() : '',
           scoreVMeasure: model.scoreVMeasure !== undefined && model.scoreVMeasure !== null ? model.scoreVMeasure.toString() : '',
+          visible: true
         }];
 
     setEditResults(initialResults);
@@ -241,7 +244,8 @@ export default function ModelDetail() {
         scoreSilhouette: '',
         scoreAMI: '',
         scoreHomogeneity: '',
-        scoreVMeasure: ''
+        scoreVMeasure: '',
+        visible: true
       },
       ...prev
     ]);
@@ -346,6 +350,7 @@ export default function ModelDetail() {
           scoreAMI: res.scoreAMI !== '' ? parseFloat(res.scoreAMI) : undefined,
           scoreHomogeneity: res.scoreHomogeneity !== '' ? parseFloat(res.scoreHomogeneity) : undefined,
           scoreVMeasure: res.scoreVMeasure !== '' ? parseFloat(res.scoreVMeasure) : undefined,
+          visible: res.visible !== false
         });
       }
 
@@ -399,6 +404,37 @@ export default function ModelDetail() {
     }
   };
 
+  const toggleResultVisibility = async (clusterSize) => {
+    if (isSaving) return;
+
+    const updatedResults = model.results.map((res) => {
+      if (res.clusterSize === clusterSize) {
+        return { ...res, visible: res.visible === false ? true : false };
+      }
+      return res;
+    });
+
+    const token = localStorage.getItem('token');
+    try {
+      const payload = {
+        results: updatedResults
+      };
+
+      const { data } = await axios.put(`${API_URL}/models/${id}`, payload, {
+        headers: {
+          Authorization: `Bearer ${token}`
+        }
+      });
+
+      setModel(data);
+      updateModelInCache(data);
+    } catch (error) {
+      console.error('Error toggling visibility:', error);
+      const errMsg = error.response?.data?.message || 'Failed to update visibility.';
+      await showAlert('Visibility Update Failed', errMsg, 'error');
+    }
+  };
+
   const displayResults = model ? [...(model.results && model.results.length > 0 ? model.results : [{
     clusterSize: model.clusterSize,
     scoreARI: model.scoreARI,
@@ -406,8 +442,11 @@ export default function ModelDetail() {
     scoreSilhouette: model.scoreSilhouette,
     scoreAMI: model.scoreAMI,
     scoreHomogeneity: model.scoreHomogeneity,
-    scoreVMeasure: model.scoreVMeasure
-  }])].sort((a, b) => {
+    scoreVMeasure: model.scoreVMeasure,
+    visible: true
+  }])]
+  .filter(res => res.visible !== false || canManage)
+  .sort((a, b) => {
     const ariA = a.scoreARI !== undefined && a.scoreARI !== null ? a.scoreARI : -1;
     const ariB = b.scoreARI !== undefined && b.scoreARI !== null ? b.scoreARI : -1;
     if (ariB !== ariA) return ariB - ariA;
@@ -527,11 +566,33 @@ export default function ModelDetail() {
                 </h3>
                 <div className="grid grid-cols-1 gap-4">
                   {displayResults.map((res, index) => (
-                    <div key={index} className="bg-surface-container-low border border-outline-border/60 rounded-default p-4.5 space-y-4 shadow-sm hover:shadow-md transition-shadow">
+                    <div key={index} className={`bg-surface-container-low border border-outline-border/60 rounded-default p-4.5 space-y-4 shadow-sm hover:shadow-md transition-shadow ${res.visible === false ? 'border-dashed border-outline/50 opacity-85' : ''}`}>
                       <div className="flex justify-between items-center border-b border-outline-border/40 pb-2">
-                        <span className="text-xs font-bold text-primary font-outfit uppercase tracking-wider">
-                          Evaluation Config: {res.clusterSize} Clusters
-                        </span>
+                        <div className="flex items-center gap-2">
+                          <span className="text-xs font-bold text-primary font-outfit uppercase tracking-wider">
+                            Evaluation Config: {res.clusterSize} Clusters
+                          </span>
+                          {res.visible === false && (
+                            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-error-container/20 text-error border border-error-container/30">
+                              <EyeOff className="h-3 w-3" />
+                              Hidden from Dashboard
+                            </span>
+                          )}
+                        </div>
+                        {isAuthor && (
+                          <button
+                            type="button"
+                            onClick={() => toggleResultVisibility(res.clusterSize)}
+                            className="text-on-surface-variant hover:text-primary transition-colors cursor-pointer p-1 rounded-default hover:bg-surface-container flex items-center justify-center shrink-0 border border-outline-border/30"
+                            title={res.visible === false ? "Show on Leaderboard" : "Hide from Leaderboard"}
+                          >
+                            {res.visible === false ? (
+                              <EyeOff className="h-3.5 w-3.5 text-error" />
+                            ) : (
+                              <Eye className="h-3.5 w-3.5 text-primary" />
+                            )}
+                          </button>
+                        )}
                       </div>
 
                       <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-6 gap-3 w-full">
