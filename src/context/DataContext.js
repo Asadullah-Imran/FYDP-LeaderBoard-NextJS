@@ -60,8 +60,45 @@ export function DataProvider({ children }) {
   // Update a model after edit
   const updateModelInCache = (updatedModel) => {
     const id = updatedModel._id;
-    setModelDetails((prev) => ({ ...prev, [id]: updatedModel }));
-    setModels((prev) => prev.map((m) => (m._id === id ? updatedModel : m)));
+    const oldModel = models.find(m => m._id === id);
+    const oldName = oldModel ? oldModel.name : updatedModel.name;
+
+    setModelDetails((prev) => {
+      const copy = { ...prev };
+      copy[id] = updatedModel;
+      
+      // Update metadata on all other model detail objects in cache with matching name
+      Object.keys(copy).forEach((k) => {
+        if (copy[k].name === oldName || copy[k].name === updatedModel.name) {
+          copy[k] = {
+            ...copy[k],
+            name: updatedModel.name,
+            descriptionMarkdown: updatedModel.descriptionMarkdown,
+            methodologyImages: updatedModel.methodologyImages,
+            architectureFlow: updatedModel.architectureFlow,
+            githubUrl: updatedModel.githubUrl,
+            paperUrl: updatedModel.paperUrl
+          };
+        }
+      });
+      return copy;
+    });
+
+    setModels((prev) => prev.map((m) => {
+      if (m._id === id) return updatedModel;
+      if (m.name === oldName || m.name === updatedModel.name) {
+        return {
+          ...m,
+          name: updatedModel.name,
+          descriptionMarkdown: updatedModel.descriptionMarkdown,
+          methodologyImages: updatedModel.methodologyImages,
+          architectureFlow: updatedModel.architectureFlow,
+          githubUrl: updatedModel.githubUrl,
+          paperUrl: updatedModel.paperUrl
+        };
+      }
+      return m;
+    }));
   };
 
   // Add a new model

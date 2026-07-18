@@ -48,6 +48,8 @@ export async function PUT(req, { params }) {
       return NextResponse.json({ message: 'Model not found' }, { status: 404 });
     }
 
+    const oldName = model.name;
+
     // Check authorization: author or admin only
     if (model.authorId.toString() !== currentUser._id.toString() && currentUser.role !== 'admin') {
       return NextResponse.json({ message: 'Not authorized to update this model' }, { status: 401 });
@@ -91,6 +93,23 @@ export async function PUT(req, { params }) {
     model.paperUrl = paperUrl !== undefined ? paperUrl : model.paperUrl;
 
     const updatedModel = await model.save();
+
+    // Synchronize metadata changes to all other submissions sharing the same model name
+    if (oldName) {
+      await ModelSubmission.updateMany(
+        { name: oldName },
+        {
+          $set: {
+            name: updatedModel.name,
+            descriptionMarkdown: updatedModel.descriptionMarkdown,
+            methodologyImages: updatedModel.methodologyImages,
+            architectureFlow: updatedModel.architectureFlow,
+            githubUrl: updatedModel.githubUrl,
+            paperUrl: updatedModel.paperUrl
+          }
+        }
+      );
+    }
     
     const populatedModel = await ModelSubmission.findById(updatedModel._id)
       .populate('authorId', 'name')
