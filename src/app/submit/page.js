@@ -423,6 +423,7 @@ export default function SubmitModel() {
                   value={formData.name} 
                   onChange={handleNameChange} 
                   onFocus={() => setShowSuggestions(true)}
+                  autoComplete="off"
                   required
                   className="w-full bg-surface-container-lowest border border-outline-border rounded-default px-3 py-2 text-on-surface focus:outline-none focus:border-primary-container focus:ring-2 focus:ring-primary-container/20 transition-all text-sm font-semibold pr-16"
                 />
