@@ -387,3 +387,34 @@ sequenceDiagram
 3. **Polylines Rendering**: Renders custom SVG polylines for Adjusted Rand Index, Normalized Mutual Information, and Silhouette metrics with distinct color schemes.
 4. **Grid Overlay**: Draws dasharray scales and axis label tags.
 
+---
+
+### Scenario J: Autocomplete Model Name Suggestions & Metadata Hiding
+When researchers submit benchmarks, the system automatically checks if the model name has been submitted previously (for another dataset) to prevent entering redundant description text, pipelines, and figures.
+
+```mermaid
+sequenceDiagram
+    autonumber
+    actor Researcher as Researcher
+    participant UI as Submit Page (Client)
+    participant Cache as DataContext Cache (models)
+    
+    Researcher->>UI: Type Model Name (e.g. SpatialGlue)
+    UI->>Cache: Query unique models list matching input prefix
+    Cache-->>UI: Suggestion dropdown list of matches
+    
+    Researcher->>UI: Select an existing model profile from suggestion
+    UI->>UI: Set selectedModelProfile state to active
+    UI->>UI: Populate description, flowchart, GitHub, and Paper URLs from profile under the hood
+    UI->>UI: Hide Methodology text editor, file upload, GitHub, Paper, and Mermaid flowchart fields in UI
+    UI->>Researcher: Hide redundant metadata fields; prompt only for Dataset, evaluations, and Colab/Kaggle links
+    
+    Note over Researcher, UI: Google Colab & Kaggle input links remain visible as they are dataset-specific
+```
+1. **Name Matching**: When the user enters a name, the application searches unique model names in the `models` list in the global React Context.
+2. **Profile Linking**: If the typed name matches an existing profile exactly or if a suggested option is clicked, the profile details are linked (`selectedModelProfile`).
+3. **Implicit Mapping**: The metadata fields (Markdown, images list, GitHub URL, paper citation, and flowcharts) are mapped directly into the submittable `formData` state under the hood.
+4. **Conditional Interface Collapse**: The browser hides these inputs from the DOM using React conditionals (`!selectedModelProfile`), removing HTML5 validation blocks and decluttering the layout.
+5. **Execution-Specific Inputs**: The user only sees and fills the run-specific values (Dataset Section, Cluster Size Evaluations, Google Colab executable links, and Kaggle sandbox links).
+
+

@@ -58,6 +58,10 @@ export default function SubmitModel() {
   const router = useRouter();
 
   const [existingImages, setExistingImages] = useState([]);
+  const [modelSuggestions, setModelSuggestions] = useState([]);
+  const [showSuggestions, setShowSuggestions] = useState(false);
+  const [selectedModelProfile, setSelectedModelProfile] = useState(null);
+  const suggestionsRef = useRef(null);
 
   // Route protection
   useEffect(() => {
@@ -99,10 +103,8 @@ export default function SubmitModel() {
   // Markdown live preview tab state
   const [activeTab, setActiveTab] = useState('write'); // 'write' | 'preview'
 
-  const handlePreFillModel = (modelId) => {
-    const selected = (models || []).find(m => m._id === modelId);
-    if (!selected) return;
-
+  const selectModelProfile = (selected) => {
+    setSelectedModelProfile(selected);
     setFormData(prev => ({
       ...prev,
       name: selected.name,
@@ -119,6 +121,56 @@ export default function SubmitModel() {
     } else {
       setExistingImages([]);
     }
+    setShowSuggestions(false);
+  };
+
+  const handleNameChange = (e) => {
+    const val = e.target.value;
+    setFormData(prev => ({ ...prev, name: val }));
+
+    if (val.trim() === '') {
+      setModelSuggestions([]);
+      setSelectedModelProfile(null);
+    } else {
+      const filtered = uniqueModelProfiles.filter(m => 
+        m.name.toLowerCase().includes(val.toLowerCase())
+      );
+      setModelSuggestions(filtered);
+
+      const exactMatch = uniqueModelProfiles.find(m => 
+        m.name.toLowerCase().trim() === val.toLowerCase().trim()
+      );
+      if (exactMatch) {
+        setSelectedModelProfile(exactMatch);
+        setFormData(prev => ({
+          ...prev,
+          descriptionMarkdown: exactMatch.descriptionMarkdown,
+          architectureFlow: exactMatch.architectureFlow || '',
+          githubUrl: exactMatch.githubUrl || '',
+          colabUrl: '',
+          kaggleUrl: '',
+          paperUrl: exactMatch.paperUrl || '',
+        }));
+        setExistingImages(exactMatch.methodologyImages || []);
+      } else {
+        setSelectedModelProfile(null);
+      }
+    }
+  };
+
+  const clearSelectedModelProfile = () => {
+    setSelectedModelProfile(null);
+    setFormData(prev => ({
+      ...prev,
+      name: '',
+      descriptionMarkdown: '',
+      architectureFlow: '',
+      githubUrl: '',
+      colabUrl: '',
+      kaggleUrl: '',
+      paperUrl: '',
+    }));
+    setExistingImages([]);
   };
 
   const handleRemoveExistingImage = (idxToRemove) => {
@@ -144,11 +196,14 @@ export default function SubmitModel() {
     fetchSections();
   }, [user]);
 
-  // Listen for click outside to close dropdown
+  // Listen for click outside to close dropdowns
   useEffect(() => {
     function handleClickOutside(event) {
       if (dropdownRef.current && !dropdownRef.current.contains(event.target)) {
         setIsOpen(false);
+      }
+      if (suggestionsRef.current && !suggestionsRef.current.contains(event.target)) {
+        setShowSuggestions(false);
       }
     }
     document.addEventListener('mousedown', handleClickOutside);
@@ -349,48 +404,57 @@ export default function SubmitModel() {
           </p>
         </div>
 
-        {globalLoading && models.length === 0 ? (
-          <div className="bg-surface-container-low border border-outline-border p-4.5 rounded-default mb-6 space-y-2.5 animate-pulse">
-            <div className="h-3 bg-surface-container-high rounded w-48"></div>
-            <div className="h-9 bg-surface-container-lowest border border-outline-border rounded-default w-full"></div>
-            <div className="h-2.5 bg-surface-container-high rounded w-72"></div>
-          </div>
-        ) : uniqueModelProfiles.length > 0 ? (
-          <div className="bg-surface-container-low border border-outline-border p-4.5 rounded-default mb-6 space-y-2 animate-in fade-in duration-200">
-            <label className="block text-xs font-bold uppercase tracking-wider text-on-surface-variant font-outfit">
-              Auto-Populate Metadata from Previous Submissions
-            </label>
-            <select
-              onChange={(e) => handlePreFillModel(e.target.value)}
-              className="w-full bg-surface-container-lowest border border-outline-border rounded-default px-3 py-2 text-on-surface text-sm font-semibold focus:outline-none focus:border-primary focus:ring-2 focus:ring-primary/20 transition-all cursor-pointer"
-              defaultValue=""
-            >
-              <option value="" disabled>-- Select an existing model profile to copy details --</option>
-              {uniqueModelProfiles.map(m => (
-                <option key={m._id} value={m._id}>
-                  {m.name} (by {m.authorId?.name || 'Unknown'})
-                </option>
-              ))}
-            </select>
-            <p className="text-[10px] text-on-surface-variant italic">
-              * Choosing a model copies its Methodology text, flowchart diagrams, gallery illustrations, and source repository/Colab links.
-            </p>
-          </div>
-        ) : null}
-        
         <form onSubmit={handleSubmit} className="space-y-6">
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-            <div>
-              <label className="block text-xs font-bold uppercase tracking-wider text-on-surface-variant mb-1.5 font-outfit">Model Name</label>
-              <input 
-                type="text" 
-                name="name" 
-                placeholder="e.g. SpatialGlue-Ablated"
-                value={formData.name} 
-                onChange={handleChange} 
-                required
-                className="w-full bg-surface-container-lowest border border-outline-border rounded-default px-3 py-2 text-on-surface focus:outline-none focus:border-primary-container focus:ring-2 focus:ring-primary-container/20 transition-all text-sm font-semibold"
-              />
+            <div className="relative" ref={suggestionsRef}>
+              <label className="block text-xs font-bold uppercase tracking-wider text-on-surface-variant mb-1.5 font-outfit flex items-center gap-1.5">
+                Model Name
+                {selectedModelProfile && (
+                  <span className="text-[10px] text-emerald-600 dark:text-emerald-400 font-bold bg-emerald-500/10 border border-emerald-500/20 px-2 py-0.5 rounded-full animate-pulse">
+                    ✓ Linked Profile
+                  </span>
+                )}
+              </label>
+              <div className="relative">
+                <input 
+                  type="text" 
+                  name="name" 
+                  placeholder="e.g. SpatialGlue"
+                  value={formData.name} 
+                  onChange={handleNameChange} 
+                  onFocus={() => setShowSuggestions(true)}
+                  required
+                  className="w-full bg-surface-container-lowest border border-outline-border rounded-default px-3 py-2 text-on-surface focus:outline-none focus:border-primary-container focus:ring-2 focus:ring-primary-container/20 transition-all text-sm font-semibold pr-16"
+                />
+                {selectedModelProfile && (
+                  <button
+                    type="button"
+                    onClick={clearSelectedModelProfile}
+                    className="absolute right-2.5 top-2.5 text-on-surface-variant hover:text-error cursor-pointer text-xs font-bold font-outfit transition-colors"
+                    title="Clear linked model metadata profile"
+                  >
+                    Unlink
+                  </button>
+                )}
+              </div>
+
+              {showSuggestions && modelSuggestions.length > 0 && (
+                <div className="absolute z-50 mt-1.5 w-full bg-surface-container-lowest border border-outline-border rounded-default shadow-[0px_4px_20px_rgba(15,23,42,0.08)] overflow-hidden max-h-48 overflow-y-auto p-1.5 animate-in fade-in duration-100">
+                  {modelSuggestions.map(m => (
+                    <button
+                      key={m._id}
+                      type="button"
+                      onClick={() => selectModelProfile(m)}
+                      className="w-full text-left px-3 py-2 text-xs font-semibold rounded-default hover:bg-surface-container-low text-on-surface transition-colors cursor-pointer flex items-center justify-between"
+                    >
+                      <span>{m.name}</span>
+                      <span className="text-[9px] text-on-surface-variant/85 italic font-normal">
+                        by {m.authorId?.name || 'Unknown'}
+                      </span>
+                    </button>
+                  ))}
+                </div>
+              )}
             </div>
             
             <div className="relative" ref={dropdownRef}>
@@ -627,142 +691,146 @@ export default function SubmitModel() {
             </div>
           </div>
 
-          <div>
-            <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-2 mb-3">
-              <label className="block text-xs font-bold uppercase tracking-wider text-on-surface-variant font-outfit flex items-center gap-1.5">
-                <BookOpen className="h-4 w-4 text-primary-container" />
-                Methodology Explanation (Markdown + LaTeX)
-              </label>
-              <div className="flex bg-surface-container-low p-0.5 rounded-default border border-outline-border">
-                <button
-                  type="button"
-                  onClick={() => setActiveTab('write')}
-                  className={`flex items-center gap-1 px-3 py-1.5 rounded-default text-xs font-bold cursor-pointer transition-all ${
-                    activeTab === 'write'
-                      ? 'bg-primary-container text-white shadow-sm'
-                      : 'text-on-surface-variant hover:text-on-surface'
-                  }`}
-                >
-                  <Edit3 className="h-3 w-3" />
-                  Editor
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setActiveTab('preview')}
-                  className={`flex items-center gap-1 px-3 py-1.5 rounded-default text-xs font-bold cursor-pointer transition-all ${
-                    activeTab === 'preview'
-                      ? 'bg-primary-container text-white shadow-sm'
-                      : 'text-on-surface-variant hover:text-on-surface'
-                  }`}
-                >
-                  <Eye className="h-3 w-3" />
-                  Preview
-                </button>
-              </div>
-            </div>
-            
-            {activeTab === 'write' ? (
-              <textarea 
-                name="descriptionMarkdown" 
-                value={formData.descriptionMarkdown} 
-                onChange={handleChange} 
-                required 
-                rows={8}
-                className="w-full bg-surface-container-lowest border border-outline-border rounded-default px-3 py-2 text-on-surface focus:outline-none focus:border-primary-container focus:ring-2 focus:ring-primary-container/20 transition-all font-mono text-sm leading-relaxed"
-                placeholder="Write your methodology explanation using Markdown and LaTeX equations... (e.g. Write equations like $$E = mc^2$$ or inline $x^2$)"
-              ></textarea>
-            ) : (
-              <div className="w-full bg-surface-container-low border border-outline-border rounded-default p-6 min-h-[178px] prose dark:prose-invert text-on-surface max-w-none overflow-y-auto">
-                {formData.descriptionMarkdown.trim() ? (
-                  <div className="leading-relaxed text-sm">
-                    <ReactMarkdown 
-                      remarkPlugins={[remarkMath]}
-                      rehypePlugins={[rehypeKatex]}
+          {!selectedModelProfile && (
+            <>
+              <div>
+                <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-2 mb-3">
+                  <label className="block text-xs font-bold uppercase tracking-wider text-on-surface-variant font-outfit flex items-center gap-1.5">
+                    <BookOpen className="h-4 w-4 text-primary-container" />
+                    Methodology Explanation (Markdown + LaTeX)
+                  </label>
+                  <div className="flex bg-surface-container-low p-0.5 rounded-default border border-outline-border">
+                    <button
+                      type="button"
+                      onClick={() => setActiveTab('write')}
+                      className={`flex items-center gap-1 px-3 py-1.5 rounded-default text-xs font-bold cursor-pointer transition-all ${
+                        activeTab === 'write'
+                          ? 'bg-primary-container text-white shadow-sm'
+                          : 'text-on-surface-variant hover:text-on-surface'
+                      }`}
                     >
-                      {formData.descriptionMarkdown}
-                    </ReactMarkdown>
+                      <Edit3 className="h-3 w-3" />
+                      Editor
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setActiveTab('preview')}
+                      className={`flex items-center gap-1 px-3 py-1.5 rounded-default text-xs font-bold cursor-pointer transition-all ${
+                        activeTab === 'preview'
+                          ? 'bg-primary-container text-white shadow-sm'
+                          : 'text-on-surface-variant hover:text-on-surface'
+                      }`}
+                    >
+                      <Eye className="h-3 w-3" />
+                      Preview
+                    </button>
                   </div>
+                </div>
+                
+                {activeTab === 'write' ? (
+                  <textarea 
+                    name="descriptionMarkdown" 
+                    value={formData.descriptionMarkdown} 
+                    onChange={handleChange} 
+                    required 
+                    rows={8}
+                    className="w-full bg-surface-container-lowest border border-outline-border rounded-default px-3 py-2 text-on-surface focus:outline-none focus:border-primary-container focus:ring-2 focus:ring-primary-container/20 transition-all font-mono text-sm leading-relaxed"
+                    placeholder="Write your methodology explanation using Markdown and LaTeX equations... (e.g. Write equations like $$E = mc^2$$ or inline $x^2$)"
+                  ></textarea>
                 ) : (
-                  <div className="text-on-surface-variant italic text-xs text-center pt-10 flex flex-col items-center gap-2">
-                    <Info className="h-5 w-5 text-on-surface-variant/40" />
-                    Nothing to preview. Select the 'Editor' tab to add methodology text.
+                  <div className="w-full bg-surface-container-low border border-outline-border rounded-default p-6 min-h-[178px] prose dark:prose-invert text-on-surface max-w-none overflow-y-auto">
+                    {formData.descriptionMarkdown.trim() ? (
+                      <div className="leading-relaxed text-sm">
+                        <ReactMarkdown 
+                          remarkPlugins={[remarkMath]}
+                          rehypePlugins={[rehypeKatex]}
+                        >
+                          {formData.descriptionMarkdown}
+                        </ReactMarkdown>
+                      </div>
+                    ) : (
+                      <div className="text-on-surface-variant italic text-xs text-center pt-10 flex flex-col items-center gap-2">
+                        <Info className="h-5 w-5 text-on-surface-variant/40" />
+                        Nothing to preview. Select the 'Editor' tab to add methodology text.
+                      </div>
+                    )}
                   </div>
                 )}
               </div>
-            )}
-          </div>
 
-          <div>
-            <label className="block text-xs font-bold uppercase tracking-wider text-on-surface-variant mb-1.5 font-outfit flex items-center gap-1.5">
-              <Image className="h-4 w-4 text-primary-container" />
-              Methodology Images (Gallery Upload) - Multiple Allowed
-            </label>
-            
-            {existingImages.length > 0 && (
-              <div className="space-y-2 mb-4">
-                <span className="block text-[10px] font-bold text-on-surface-variant uppercase tracking-wider font-outfit">Pre-existing copied gallery images:</span>
-                <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                  {existingImages.map((url, idx) => (
-                    <div key={idx} className="relative group border border-outline-border rounded-default overflow-hidden h-24 bg-surface-container-low shadow-sm">
-                      <img src={url} alt={`Pre-existing copied gallery image ${idx + 1}`} className="w-full h-full object-cover" />
-                      <button
-                        type="button"
-                        onClick={() => handleRemoveExistingImage(idx)}
-                        className="absolute inset-0 bg-black/60 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity text-white hover:text-error-container font-extrabold text-xs cursor-pointer gap-1"
-                      >
-                        <Trash2 className="h-4 w-4 text-error" />
-                        Remove
-                      </button>
+              <div>
+                <label className="block text-xs font-bold uppercase tracking-wider text-on-surface-variant mb-1.5 font-outfit flex items-center gap-1.5">
+                  <Image className="h-4 w-4 text-primary-container" />
+                  Methodology Images (Gallery Upload) - Multiple Allowed
+                </label>
+                
+                {existingImages.length > 0 && (
+                  <div className="space-y-2 mb-4">
+                    <span className="block text-[10px] font-bold text-on-surface-variant uppercase tracking-wider font-outfit">Pre-existing copied gallery images:</span>
+                    <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                      {existingImages.map((url, idx) => (
+                        <div key={idx} className="relative group border border-outline-border rounded-default overflow-hidden h-24 bg-surface-container-low shadow-sm">
+                          <img src={url} alt={`Pre-existing copied gallery image ${idx + 1}`} className="w-full h-full object-cover" />
+                          <button
+                            type="button"
+                            onClick={() => handleRemoveExistingImage(idx)}
+                            className="absolute inset-0 bg-black/60 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity text-white hover:text-error-container font-extrabold text-xs cursor-pointer gap-1"
+                          >
+                            <Trash2 className="h-4 w-4 text-error" />
+                            Remove
+                          </button>
+                        </div>
+                      ))}
                     </div>
-                  ))}
-                </div>
+                  </div>
+                )}
+
+                {imageFiles.length > 0 && (
+                  <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-4">
+                    {imageFiles.map((file, idx) => {
+                      const localUrl = URL.createObjectURL(file);
+                      return (
+                        <div key={idx} className="relative group border border-outline-border rounded-default overflow-hidden h-24 bg-surface-container-low shadow-sm">
+                          <img src={localUrl} alt={`Selected Upload ${idx + 1}`} className="w-full h-full object-cover" />
+                          <button
+                            type="button"
+                            onClick={() => handleRemoveImage(idx)}
+                            className="absolute inset-0 bg-black/60 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity text-white hover:text-error-container font-extrabold text-xs cursor-pointer gap-1"
+                          >
+                            <Trash2 className="h-4 w-4 text-error" />
+                            Remove
+                          </button>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+
+                <input 
+                  type="file" 
+                  onChange={handleImageChange} 
+                  accept="image/*"
+                  multiple
+                  className="w-full bg-surface-container-lowest border border-outline-border rounded-default px-3 py-2 text-on-surface text-sm file:mr-4 file:py-1.5 file:px-3.5 file:rounded-default file:border-0 file:text-xs file:font-bold file:bg-primary-container file:text-white hover:file:bg-primary-container/90 transition-colors cursor-pointer"
+                />
               </div>
-            )}
 
-            {imageFiles.length > 0 && (
-              <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-4">
-                {imageFiles.map((file, idx) => {
-                  const localUrl = URL.createObjectURL(file);
-                  return (
-                    <div key={idx} className="relative group border border-outline-border rounded-default overflow-hidden h-24 bg-surface-container-low shadow-sm">
-                      <img src={localUrl} alt={`Selected Upload ${idx + 1}`} className="w-full h-full object-cover" />
-                      <button
-                        type="button"
-                        onClick={() => handleRemoveImage(idx)}
-                        className="absolute inset-0 bg-black/60 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity text-white hover:text-error-container font-extrabold text-xs cursor-pointer gap-1"
-                      >
-                        <Trash2 className="h-4 w-4 text-error" />
-                        Remove
-                      </button>
-                    </div>
-                  );
-                })}
+              <div>
+                <label className="block text-xs font-bold uppercase tracking-wider text-on-surface-variant mb-1.5 font-outfit flex items-center gap-1.5">
+                  <Code className="h-4 w-4 text-primary-container" />
+                  GitHub Repository (Source Code) - Optional
+                </label>
+                <input 
+                  type="url" 
+                  name="githubUrl" 
+                  placeholder="e.g. https://github.com/username/project-repo"
+                  value={formData.githubUrl} 
+                  onChange={handleChange} 
+                  className="w-full bg-surface-container-lowest border border-outline-border rounded-default px-3 py-2 text-on-surface focus:outline-none focus:border-primary-container focus:ring-2 focus:ring-primary-container/20 transition-all text-sm font-semibold"
+                />
               </div>
-            )}
-
-            <input 
-              type="file" 
-              onChange={handleImageChange} 
-              accept="image/*"
-              multiple
-              className="w-full bg-surface-container-lowest border border-outline-border rounded-default px-3 py-2 text-on-surface text-sm file:mr-4 file:py-1.5 file:px-3.5 file:rounded-default file:border-0 file:text-xs file:font-bold file:bg-primary-container file:text-white hover:file:bg-primary-container/90 transition-colors cursor-pointer"
-            />
-          </div>
-
-          <div>
-            <label className="block text-xs font-bold uppercase tracking-wider text-on-surface-variant mb-1.5 font-outfit flex items-center gap-1.5">
-              <Code className="h-4 w-4 text-primary-container" />
-              GitHub Repository (Source Code) - Optional
-            </label>
-            <input 
-              type="url" 
-              name="githubUrl" 
-              placeholder="e.g. https://github.com/username/project-repo"
-              value={formData.githubUrl} 
-              onChange={handleChange} 
-              className="w-full bg-surface-container-lowest border border-outline-border rounded-default px-3 py-2 text-on-surface focus:outline-none focus:border-primary-container focus:ring-2 focus:ring-primary-container/20 transition-all text-sm font-semibold"
-            />
-          </div>
+            </>
+          )}
 
           <div>
             <label className="block text-xs font-bold uppercase tracking-wider text-on-surface-variant mb-1.5 font-outfit flex items-center gap-1.5">
@@ -794,32 +862,36 @@ export default function SubmitModel() {
             />
           </div>
 
-          <div>
-            <label className="block text-xs font-bold uppercase tracking-wider text-on-surface-variant mb-1.5 font-outfit flex items-center gap-1.5">
-              <BookOpen className="h-4 w-4 text-amber-500" />
-              Research Paper / Citation Link - Optional
-            </label>
-            <input 
-              type="url" 
-              name="paperUrl" 
-              placeholder="e.g. https://doi.org/10.1038/..."
-              value={formData.paperUrl} 
-              onChange={handleChange} 
-              className="w-full bg-surface-container-lowest border border-outline-border rounded-default px-3 py-2 text-on-surface focus:outline-none focus:border-primary-container focus:ring-2 focus:ring-primary-container/20 transition-all text-sm font-semibold"
-            />
-          </div>
+          {!selectedModelProfile && (
+            <>
+              <div>
+                <label className="block text-xs font-bold uppercase tracking-wider text-on-surface-variant mb-1.5 font-outfit flex items-center gap-1.5">
+                  <BookOpen className="h-4 w-4 text-amber-500" />
+                  Research Paper / Citation Link - Optional
+                </label>
+                <input 
+                  type="url" 
+                  name="paperUrl" 
+                  placeholder="e.g. https://doi.org/10.1038/..."
+                  value={formData.paperUrl} 
+                  onChange={handleChange} 
+                  className="w-full bg-surface-container-lowest border border-outline-border rounded-default px-3 py-2 text-on-surface focus:outline-none focus:border-primary-container focus:ring-2 focus:ring-primary-container/20 transition-all text-sm font-semibold"
+                />
+              </div>
 
-          <div>
-            <label className="block text-xs font-bold uppercase tracking-wider text-on-surface-variant mb-1.5 font-outfit">Architecture Flow (Mermaid.js Scheme) - Optional</label>
-            <textarea 
-              name="architectureFlow" 
-              value={formData.architectureFlow} 
-              onChange={handleChange} 
-              rows={4}
-              className="w-full bg-surface-container-lowest border border-outline-border rounded-default px-3 py-2 text-on-surface focus:outline-none focus:border-primary-container focus:ring-2 focus:ring-primary-container/20 transition-all font-mono text-xs leading-relaxed"
-              placeholder="graph TD;&#10;  A[Spatial Omics Input] --> B( spaLLM Integration );&#10;  B --> C[ARI/NMI Evaluation];"
-            ></textarea>
-          </div>
+              <div>
+                <label className="block text-xs font-bold uppercase tracking-wider text-on-surface-variant mb-1.5 font-outfit">Architecture Flow (Mermaid.js Scheme) - Optional</label>
+                <textarea 
+                  name="architectureFlow" 
+                  value={formData.architectureFlow} 
+                  onChange={handleChange} 
+                  rows={4}
+                  className="w-full bg-surface-container-lowest border border-outline-border rounded-default px-3 py-2 text-on-surface focus:outline-none focus:border-primary-container focus:ring-2 focus:ring-primary-container/20 transition-all font-mono text-xs leading-relaxed"
+                  placeholder="graph TD;&#10;  A[Spatial Omics Input] --> B( spaLLM Integration );&#10;  B --> C[ARI/NMI Evaluation];"
+                ></textarea>
+              </div>
+            </>
+          )}
 
           <button 
             type="submit" 
