@@ -60,7 +60,10 @@ export async function PUT(req, { params }) {
       descriptionMarkdown, 
       methodologyImages, 
       architectureFlow, 
-      githubUrl 
+      githubUrl,
+      colabUrl,
+      kaggleUrl,
+      paperUrl
     } = await req.json();
 
     model.name = name || model.name;
@@ -83,6 +86,9 @@ export async function PUT(req, { params }) {
     model.methodologyImages = methodologyImages || model.methodologyImages;
     model.architectureFlow = architectureFlow !== undefined ? architectureFlow : model.architectureFlow;
     model.githubUrl = githubUrl !== undefined ? githubUrl : model.githubUrl;
+    model.colabUrl = colabUrl !== undefined ? colabUrl : model.colabUrl;
+    model.kaggleUrl = kaggleUrl !== undefined ? kaggleUrl : model.kaggleUrl;
+    model.paperUrl = paperUrl !== undefined ? paperUrl : model.paperUrl;
 
     const updatedModel = await model.save();
     

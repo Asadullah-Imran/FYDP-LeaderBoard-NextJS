@@ -2,7 +2,7 @@
 import { useState, useEffect, useRef } from 'react';
 import axios from 'axios';
 import { useRouter } from 'next/navigation';
-import { Check, ChevronsUpDown, Search, Eye, Edit3, UploadCloud, Info, BookOpen, ArrowLeft, Code, Trash2, Image } from 'lucide-react';
+import { Check, ChevronsUpDown, Search, Eye, Edit3, UploadCloud, Info, BookOpen, ArrowLeft, Code, Trash2, Image, Play, Terminal } from 'lucide-react';
 import ReactMarkdown from 'react-markdown';
 import remarkMath from 'remark-math';
 import rehypeKatex from 'rehype-katex';
@@ -70,6 +70,9 @@ export default function SubmitModel() {
     descriptionMarkdown: '',
     architectureFlow: '',
     githubUrl: '',
+    colabUrl: '',
+    kaggleUrl: '',
+    paperUrl: '',
   });
   const [results, setResults] = useState([
     {
@@ -666,6 +669,51 @@ export default function SubmitModel() {
               name="githubUrl" 
               placeholder="e.g. https://github.com/username/project-repo"
               value={formData.githubUrl} 
+              onChange={handleChange} 
+              className="w-full bg-surface-container-lowest border border-outline-border rounded-default px-3 py-2 text-on-surface focus:outline-none focus:border-primary-container focus:ring-2 focus:ring-primary-container/20 transition-all text-sm font-semibold"
+            />
+          </div>
+
+          <div>
+            <label className="block text-xs font-bold uppercase tracking-wider text-on-surface-variant mb-1.5 font-outfit flex items-center gap-1.5">
+              <Play className="h-4 w-4 text-emerald-500 animate-pulse" />
+              Google Colab Notebook (Run Code) - Optional
+            </label>
+            <input 
+              type="url" 
+              name="colabUrl" 
+              placeholder="e.g. https://colab.research.google.com/drive/..."
+              value={formData.colabUrl} 
+              onChange={handleChange} 
+              className="w-full bg-surface-container-lowest border border-outline-border rounded-default px-3 py-2 text-on-surface focus:outline-none focus:border-primary-container focus:ring-2 focus:ring-primary-container/20 transition-all text-sm font-semibold"
+            />
+          </div>
+
+          <div>
+            <label className="block text-xs font-bold uppercase tracking-wider text-on-surface-variant mb-1.5 font-outfit flex items-center gap-1.5">
+              <Terminal className="h-4 w-4 text-blue-500" />
+              Kaggle Notebook (Sandbox Code) - Optional
+            </label>
+            <input 
+              type="url" 
+              name="kaggleUrl" 
+              placeholder="e.g. https://www.kaggle.com/code/..."
+              value={formData.kaggleUrl} 
+              onChange={handleChange} 
+              className="w-full bg-surface-container-lowest border border-outline-border rounded-default px-3 py-2 text-on-surface focus:outline-none focus:border-primary-container focus:ring-2 focus:ring-primary-container/20 transition-all text-sm font-semibold"
+            />
+          </div>
+
+          <div>
+            <label className="block text-xs font-bold uppercase tracking-wider text-on-surface-variant mb-1.5 font-outfit flex items-center gap-1.5">
+              <BookOpen className="h-4 w-4 text-amber-500" />
+              Research Paper / Citation Link - Optional
+            </label>
+            <input 
+              type="url" 
+              name="paperUrl" 
+              placeholder="e.g. https://doi.org/10.1038/..."
+              value={formData.paperUrl} 
               onChange={handleChange} 
               className="w-full bg-surface-container-lowest border border-outline-border rounded-default px-3 py-2 text-on-surface focus:outline-none focus:border-primary-container focus:ring-2 focus:ring-primary-container/20 transition-all text-sm font-semibold"
             />

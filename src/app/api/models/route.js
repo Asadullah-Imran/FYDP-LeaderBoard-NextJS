@@ -32,7 +32,10 @@ export async function POST(req) {
       descriptionMarkdown, 
       methodologyImages, 
       architectureFlow, 
-      githubUrl 
+      githubUrl,
+      colabUrl,
+      kaggleUrl,
+      paperUrl
     } = await req.json();
 
     const modelResults = Array.isArray(results) ? results.map(res => ({
@@ -54,7 +57,10 @@ export async function POST(req) {
       descriptionMarkdown,
       methodologyImages,
       architectureFlow,
-      githubUrl
+      githubUrl,
+      colabUrl,
+      kaggleUrl,
+      paperUrl
     });
 
     const createdModel = await model.save();

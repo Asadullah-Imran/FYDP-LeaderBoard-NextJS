@@ -337,3 +337,53 @@ Security operations on backend routes are protected using the `verifyAuth` helpe
 2. **Authorization Header**: Fallback checks for standard Bearer tokens (`req.headers.get('authorization')`).
 3. **Verification**: Decodes the token using `jwt.verify` against `process.env.JWT_SECRET`.
 4. **Database Verification**: Performs `User.findById(decoded.id).select('-password')` to retrieve verified user document details (omitting credentials) before proceeding to execution logic.
+
+---
+
+## 5. Comparative Analysis & Visualization Scenarios
+
+### Scenario H: Side-by-Side Model Comparison
+```mermaid
+sequenceDiagram
+    actor User
+    participant Dashboard as Homepage UI
+    participant Drawer as Floating Drawer
+    participant Modal as Comparison Modal
+
+    User->>Dashboard: Checks Compare checkbox on row cell (Model A)
+    Dashboard->>Dashboard: Append Model A to selectedCompare
+    Dashboard->>Drawer: Renders selection status
+    
+    User->>Dashboard: Checks Compare checkbox on row cell (Model B)
+    Dashboard->>Dashboard: Append Model B to selectedCompare
+    Dashboard->>Drawer: Renders Compare button (A vs B ready)
+    
+    User->>Drawer: Clicks "Compare"
+    Drawer->>Modal: Open modal with selectedCompare array
+    Modal->>Modal: Calculate differences delta (Score A - Score B)
+    Modal->>User: Display delta matrix grid & side-by-side methodology images
+```
+1. **Selection**: User clicks rows selection checkboxes which tracks checked models inside `selectedCompare` local state array.
+2. **Drawer Alert**: A floating bottom drawer displays the names and configurations of selected models.
+3. **Delta Calculation**: Clicking compare opens an overlay modal. The component reads the populated `score` parameters directly from the local data cache and computes delta margins, applying green tags for positive differences and red tags for negative differences.
+4. **Methodology Image Comparative**: Modal renders methodology graphics side-by-side for comparative overview.
+
+### Scenario I: Cluster Sensitivity Parameter Visualizer
+```mermaid
+sequenceDiagram
+    participant UI as Details Page UI
+    participant Chart as Custom SVG Component
+    participant User
+
+    UI->>UI: Filter active configurations (visible === true)
+    UI->>UI: Sort by clusterSize ascending (K-sizes)
+    UI->>Chart: Map scores to SVG viewport coordinates
+    Chart->>Chart: Draw polylines paths (ARI, NMI, Silhouette)
+    Chart->>Chart: Render circles dots & horizontal scale indicators
+    Chart-->>User: Display interactive sensitivity line graph
+```
+1. **Preprocessing**: The model details page filters evaluations array to extract visible configurations, sorting them by `clusterSize` ascending.
+2. **SVG Coordinates Mapping**: Converts mathematical scores (0 to 1) and cluster values (min to max K size) into normalized canvas pixel space.
+3. **Polylines Rendering**: Renders custom SVG polylines for Adjusted Rand Index, Normalized Mutual Information, and Silhouette metrics with distinct color schemes.
+4. **Grid Overlay**: Draws dasharray scales and axis label tags.
+

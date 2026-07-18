@@ -49,7 +49,9 @@ const modelSubmissionSchema = new mongoose.Schema({
   methodologyImages: [{ type: String }], // Array of image URLs for methodology
   architectureFlow: { type: String }, // Optional Mermaid.js syntax content
   githubUrl: { type: String }, // Optional link to source code
-  
+  colabUrl: { type: String }, // Optional link to Google Colab Notebook
+  kaggleUrl: { type: String }, // Optional link to Kaggle Notebook
+  paperUrl: { type: String }, // Optional link to scientific research publication
 }, { timestamps: true });
 
 // Backward compatibility fallback on loading legacy documents

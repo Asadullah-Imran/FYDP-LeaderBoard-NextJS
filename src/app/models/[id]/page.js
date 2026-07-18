@@ -11,7 +11,7 @@ import mermaid from 'mermaid';
 import { useAuth } from '@/context/AuthContext';
 import { usePopup } from '@/context/PopupContext';
 import { useData } from '@/context/DataContext';
-import { Edit2, Trash2, Check, X, Eye, EyeOff, Edit3, ChevronsUpDown, Search, Image, ArrowLeft, Cpu, Layers, BookOpen, AlertTriangle, Code, ExternalLink, Info, RefreshCw } from 'lucide-react';
+import { Edit2, Trash2, Check, X, Eye, EyeOff, Edit3, ChevronsUpDown, Search, Image, ArrowLeft, Cpu, Layers, BookOpen, AlertTriangle, Code, ExternalLink, Info, RefreshCw, Play, Terminal, Activity } from 'lucide-react';
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || '/api';
 
@@ -83,6 +83,9 @@ export default function ModelDetail() {
     datasetSectionId: '',
     methodologyImages: [],
     githubUrl: '',
+    colabUrl: '',
+    kaggleUrl: '',
+    paperUrl: '',
   });
 
   const [editResults, setEditResults] = useState([]);
@@ -190,7 +193,10 @@ export default function ModelDetail() {
       architectureFlow: model.architectureFlow || '',
       datasetSectionId: model.datasetSectionId?._id || model.datasetSectionId,
       methodologyImages: model.methodologyImages || [],
-      githubUrl: model.githubUrl || ''
+      githubUrl: model.githubUrl || '',
+      colabUrl: model.colabUrl || '',
+      kaggleUrl: model.kaggleUrl || '',
+      paperUrl: model.paperUrl || '',
     });
 
     const initialResults = model.results && model.results.length > 0
@@ -439,6 +445,167 @@ export default function ModelDetail() {
     }
   };
 
+  const renderSensitivityChart = () => {
+    // Filter evaluations that have at least some scores
+    const validPoints = (model && model.results && model.results.length > 0 ? model.results : [])
+      .filter(r => r.visible !== false && r.clusterSize && (
+        (r.scoreARI !== undefined && r.scoreARI !== null) ||
+        (r.scoreNMI !== undefined && r.scoreNMI !== null) ||
+        (r.scoreSilhouette !== undefined && r.scoreSilhouette !== null)
+      ))
+      .sort((a, b) => a.clusterSize - b.clusterSize);
+
+    if (validPoints.length < 2) return null;
+
+    // SVG parameters
+    const svgWidth = 650;
+    const svgHeight = 220;
+    const padding = { top: 20, right: 30, bottom: 40, left: 45 };
+
+    const sizes = validPoints.map(p => p.clusterSize);
+    const minSize = Math.min(...sizes);
+    const maxSize = Math.max(...sizes);
+    const sizeRange = maxSize - minSize || 1;
+
+    // X helper
+    const getX = (size) => {
+      return padding.left + ((size - minSize) / sizeRange) * (svgWidth - padding.left - padding.right);
+    };
+
+    // Y helper (Y ranges from 0 to 1)
+    const getY = (val) => {
+      const cleanVal = val !== undefined && val !== null ? val : 0;
+      return padding.top + (1 - cleanVal) * (svgHeight - padding.top - padding.bottom);
+    };
+
+    // Build SVG paths for ARI, NMI, and Silhouette
+    const buildPath = (metric) => {
+      const points = validPoints
+        .filter(p => p[metric] !== undefined && p[metric] !== null)
+        .map(p => `${getX(p.clusterSize)},${getY(p[metric])}`);
+      return points.length > 0 ? `M ${points.join(' L ')}` : '';
+    };
+
+    const pathARI = buildPath('scoreARI');
+    const pathNMI = buildPath('scoreNMI');
+    const pathSil = buildPath('scoreSilhouette');
+
+    return (
+      <div className="bg-surface-container-low border border-outline-border/60 rounded-default p-4.5 space-y-3.5 shadow-sm mb-6">
+        <h4 className="text-xs font-bold uppercase tracking-wider text-on-surface-variant font-outfit flex items-center gap-1.5">
+          <Activity className="h-4 w-4 text-primary" />
+          Metrics Sensitivity across Cluster Sizes
+        </h4>
+        <div className="w-full overflow-x-auto">
+          <svg viewBox={`0 0 ${svgWidth} ${svgHeight}`} className="w-full min-w-[500px] select-none">
+            {/* Grid Lines */}
+            {[0, 0.25, 0.5, 0.75, 1].map((gridVal, i) => {
+              const y = getY(gridVal);
+              return (
+                <g key={i}>
+                  <line 
+                    x1={padding.left} 
+                    y1={y} 
+                    x2={svgWidth - padding.right} 
+                    y2={y} 
+                    className="stroke-outline-variant/35 stroke-1" 
+                    style={{ strokeDasharray: '3, 3' }}
+                  />
+                  <text 
+                    x={padding.left - 8} 
+                    y={y + 3} 
+                    textAnchor="end" 
+                    className="fill-on-surface-variant/70 text-[9px] font-mono font-bold"
+                  >
+                    {gridVal.toFixed(2)}
+                  </text>
+                </g>
+              );
+            })}
+
+            {/* X Axis Labels */}
+            {validPoints.map((p, idx) => {
+              const x = getX(p.clusterSize);
+              return (
+                <g key={idx}>
+                  <line 
+                    x1={x} 
+                    y1={padding.top} 
+                    x2={x} 
+                    y2={svgHeight - padding.bottom} 
+                    className="stroke-outline-variant/20 stroke-1"
+                  />
+                  <text 
+                    x={x} 
+                    y={svgHeight - padding.bottom + 16} 
+                    textAnchor="middle" 
+                    className="fill-on-surface-variant text-[9px] font-bold font-outfit"
+                  >
+                    K={p.clusterSize}
+                  </text>
+                </g>
+              );
+            })}
+
+            {/* Line Paths */}
+            {pathARI && (
+              <path 
+                d={pathARI} 
+                className="fill-none stroke-primary stroke-[2.5] stroke-linecap-round stroke-linejoin-round"
+              />
+            )}
+            {pathNMI && (
+              <path 
+                d={pathNMI} 
+                className="fill-none stroke-secondary stroke-[2.5] stroke-linecap-round stroke-linejoin-round"
+              />
+            )}
+            {pathSil && (
+              <path 
+                d={pathSil} 
+                className="fill-none stroke-tertiary stroke-[2.5] stroke-linecap-round stroke-linejoin-round"
+              />
+            )}
+
+            {/* Dots for scores */}
+            {validPoints.map((p, idx) => {
+              const x = getX(p.clusterSize);
+              return (
+                <g key={idx}>
+                  {p.scoreARI !== undefined && p.scoreARI !== null && (
+                    <circle cx={x} cy={getY(p.scoreARI)} r="4" className="fill-surface-container-lowest stroke-primary stroke-2" />
+                  )}
+                  {p.scoreNMI !== undefined && p.scoreNMI !== null && (
+                    <circle cx={x} cy={getY(p.scoreNMI)} r="4" className="fill-surface-container-lowest stroke-secondary stroke-2" />
+                  )}
+                  {p.scoreSilhouette !== undefined && p.scoreSilhouette !== null && (
+                    <circle cx={x} cy={getY(p.scoreSilhouette)} r="4" className="fill-surface-container-lowest stroke-tertiary stroke-2" />
+                  )}
+                </g>
+              );
+            })}
+          </svg>
+        </div>
+        
+        {/* Legend */}
+        <div className="flex flex-wrap gap-4 text-[10px] font-bold font-outfit justify-center pt-1.5 border-t border-outline-border/40">
+          <div className="flex items-center gap-1.5">
+            <span className="h-2.5 w-2.5 rounded-full bg-primary shrink-0"></span>
+            <span className="text-on-surface">ARI Score</span>
+          </div>
+          <div className="flex items-center gap-1.5">
+            <span className="h-2.5 w-2.5 rounded-full bg-secondary shrink-0"></span>
+            <span className="text-on-surface">NMI Score</span>
+          </div>
+          <div className="flex items-center gap-1.5">
+            <span className="h-2.5 w-2.5 rounded-full bg-tertiary shrink-0"></span>
+            <span className="text-on-surface">Silhouette Coefficient</span>
+          </div>
+        </div>
+      </div>
+    );
+  };
+
   const displayResults = model ? [...(model.results && model.results.length > 0 ? model.results : [{
     clusterSize: model.clusterSize,
     scoreARI: model.scoreARI,
@@ -559,6 +726,51 @@ export default function ModelDetail() {
                       </a>
                     </>
                   )}
+                  {model.colabUrl && (
+                    <>
+                      <span className="text-outline-border text-xs">•</span>
+                      <a 
+                        href={model.colabUrl} 
+                        target="_blank" 
+                        rel="noopener noreferrer" 
+                        className="inline-flex items-center gap-1 text-emerald-600 dark:text-emerald-400 hover:underline font-bold text-xs"
+                      >
+                        <Play className="h-3.5 w-3.5 text-emerald-500 animate-pulse fill-emerald-500/10" />
+                        Google Colab
+                        <ExternalLink className="h-3 w-3" />
+                      </a>
+                    </>
+                  )}
+                  {model.kaggleUrl && (
+                    <>
+                      <span className="text-outline-border text-xs">•</span>
+                      <a 
+                        href={model.kaggleUrl} 
+                        target="_blank" 
+                        rel="noopener noreferrer" 
+                        className="inline-flex items-center gap-1 text-blue-600 dark:text-blue-400 hover:underline font-bold text-xs"
+                      >
+                        <Terminal className="h-3.5 w-3.5 text-blue-500" />
+                        Kaggle Notebook
+                        <ExternalLink className="h-3 w-3" />
+                      </a>
+                    </>
+                  )}
+                  {model.paperUrl && (
+                    <>
+                      <span className="text-outline-border text-xs">•</span>
+                      <a 
+                        href={model.paperUrl} 
+                        target="_blank" 
+                        rel="noopener noreferrer" 
+                        className="inline-flex items-center gap-1 text-amber-600 dark:text-amber-500 hover:underline font-bold text-xs"
+                      >
+                        <BookOpen className="h-3.5 w-3.5 text-amber-500" />
+                        Research Paper
+                        <ExternalLink className="h-3 w-3" />
+                      </a>
+                    </>
+                  )}
                 </div>
               </div>
 
@@ -568,6 +780,9 @@ export default function ModelDetail() {
                   <Layers className="h-4 w-4 text-primary" />
                   Cluster Size Evaluations
                 </h3>
+                
+                {renderSensitivityChart()}
+
                 <div className="grid grid-cols-1 gap-4">
                   {displayResults.map((res, index) => (
                     <div key={index} className={`bg-surface-container-low border border-outline-border/60 rounded-default p-4.5 space-y-4 shadow-sm hover:shadow-md transition-shadow ${res.visible === false ? 'border-dashed border-outline/50 opacity-85' : ''}`}>
@@ -1094,7 +1309,7 @@ export default function ModelDetail() {
               />
             </div>
 
-            <div>
+             <div>
               <label className="block text-xs font-bold uppercase tracking-wider text-on-surface-variant mb-1.5 font-outfit flex items-center gap-1.5">
                 <Code className="h-4 w-4 text-primary-container" />
                 GitHub Repository (Source Code) - Optional
@@ -1104,6 +1319,51 @@ export default function ModelDetail() {
                 name="githubUrl" 
                 placeholder="e.g. https://github.com/username/project-repo"
                 value={editData.githubUrl} 
+                onChange={handleEditChange} 
+                className="w-full bg-surface-container-lowest border border-outline-border rounded-default px-3 py-2 text-on-surface focus:outline-none focus:border-primary-container focus:ring-2 focus:ring-primary-container/20 transition-all text-sm font-semibold"
+              />
+            </div>
+
+            <div>
+              <label className="block text-xs font-bold uppercase tracking-wider text-on-surface-variant mb-1.5 font-outfit flex items-center gap-1.5">
+                <Play className="h-4 w-4 text-emerald-500 animate-pulse" />
+                Google Colab Notebook (Run Code) - Optional
+              </label>
+              <input 
+                type="url" 
+                name="colabUrl" 
+                placeholder="e.g. https://colab.research.google.com/drive/..."
+                value={editData.colabUrl} 
+                onChange={handleEditChange} 
+                className="w-full bg-surface-container-lowest border border-outline-border rounded-default px-3 py-2 text-on-surface focus:outline-none focus:border-primary-container focus:ring-2 focus:ring-primary-container/20 transition-all text-sm font-semibold"
+              />
+            </div>
+
+            <div>
+              <label className="block text-xs font-bold uppercase tracking-wider text-on-surface-variant mb-1.5 font-outfit flex items-center gap-1.5">
+                <Terminal className="h-4 w-4 text-blue-500" />
+                Kaggle Notebook (Sandbox Code) - Optional
+              </label>
+              <input 
+                type="url" 
+                name="kaggleUrl" 
+                placeholder="e.g. https://www.kaggle.com/code/..."
+                value={editData.kaggleUrl} 
+                onChange={handleEditChange} 
+                className="w-full bg-surface-container-lowest border border-outline-border rounded-default px-3 py-2 text-on-surface focus:outline-none focus:border-primary-container focus:ring-2 focus:ring-primary-container/20 transition-all text-sm font-semibold"
+              />
+            </div>
+
+            <div>
+              <label className="block text-xs font-bold uppercase tracking-wider text-on-surface-variant mb-1.5 font-outfit flex items-center gap-1.5">
+                <BookOpen className="h-4 w-4 text-amber-500" />
+                Research Paper / Citation Link - Optional
+              </label>
+              <input 
+                type="url" 
+                name="paperUrl" 
+                placeholder="e.g. https://doi.org/10.1038/..."
+                value={editData.paperUrl} 
                 onChange={handleEditChange} 
                 className="w-full bg-surface-container-lowest border border-outline-border rounded-default px-3 py-2 text-on-surface focus:outline-none focus:border-primary-container focus:ring-2 focus:ring-primary-container/20 transition-all text-sm font-semibold"
               />

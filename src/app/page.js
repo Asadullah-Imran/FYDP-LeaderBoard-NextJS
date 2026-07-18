@@ -1,12 +1,19 @@
 'use client';
 import React, { useEffect, useState, useRef } from 'react';
 import Link from 'next/link';
-import { Trophy, Medal, ArrowRight, Sparkles, AlertCircle, Cpu, BarChart3, ChevronsUpDown } from 'lucide-react';
+import { Trophy, Medal, ArrowRight, Sparkles, AlertCircle, Cpu, BarChart3, ChevronsUpDown, X, Play, Terminal, Code, Search } from 'lucide-react';
 import { useData } from '@/context/DataContext';
+import { usePopup } from '@/context/PopupContext';
 
 export default function Dashboard() {
   const { sections, models, globalLoading: loading, fetchGlobalData } = useData();
+  const { showAlert } = usePopup();
+  
   const [metricTab, setMetricTab] = useState('ARI'); // 'ARI' | 'NMI' | 'Silhouette'
+  const [tableSortMetric, setTableSortMetric] = useState('ARI'); // 'ARI' | 'NMI' | 'Silhouette'
+  const [searchQuery, setSearchQuery] = useState('');
+  const [selectedCompare, setSelectedCompare] = useState([]);
+  const [compareModalOpen, setCompareModalOpen] = useState(false);
   
   // Multi-select dataset filters
   const [selectedDatasets, setSelectedDatasets] = useState([]);
@@ -57,6 +64,19 @@ export default function Dashboard() {
     } else {
       setSelectedDatasets(nonEmptySections.map(s => s._id));
     }
+  };
+
+  const handleCompareSelect = (model) => {
+    const exists = selectedCompare.some(item => item.resultKey === model.resultKey);
+    if (exists) {
+      setSelectedCompare(prev => prev.filter(item => item.resultKey !== model.resultKey));
+      return;
+    }
+    if (selectedCompare.length >= 2) {
+      showAlert('Comparison Limit', 'You can select up to 2 models for comparative benchmarking.', 'warning');
+      return;
+    }
+    setSelectedCompare(prev => [...prev, model]);
   };
 
   // Compute overall performance of models across all datasets
@@ -131,6 +151,22 @@ export default function Dashboard() {
           A centralized, clinical-grade benchmark platform designed to track, compare, and display the performance of spatial bioinformatics and multi-omics integration models.
         </p>
       </div>
+
+      {/* Search Input Filter */}
+      {!loading && nonEmptySections.length > 0 && (
+        <div className="max-w-md mx-auto relative px-4 w-full">
+          <div className="relative">
+            <input
+              type="text"
+              placeholder="Search models or authors..."
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              className="w-full bg-surface-container-lowest border border-outline-border rounded-full pl-10 pr-4 py-2.5 text-sm text-on-surface focus:outline-none focus:border-primary focus:ring-2 focus:ring-primary/20 transition-all font-semibold shadow-xs"
+            />
+            <Search className="absolute left-3.5 top-3 h-4.5 w-4.5 text-on-surface-variant/70" />
+          </div>
+        </div>
+      )}
 
       {loading ? (
         <div className="space-y-12 animate-pulse">
@@ -404,6 +440,11 @@ export default function Dashboard() {
             const sectionModels = [];
             models.forEach(model => {
               if (model.datasetSectionId?._id !== section._id) return;
+
+              // Filter by searchQuery on model name or author name
+              const nameMatch = model.name.toLowerCase().includes(searchQuery.toLowerCase());
+              const authorMatch = (model.authorId?.name || '').toLowerCase().includes(searchQuery.toLowerCase());
+              if (searchQuery && !nameMatch && !authorMatch) return;
               
               if (model.results && model.results.length > 0) {
                 model.results.forEach(res => {
@@ -420,7 +461,15 @@ export default function Dashboard() {
                     scoreSilhouette: res.scoreSilhouette,
                     scoreAMI: res.scoreAMI,
                     scoreHomogeneity: res.scoreHomogeneity,
-                    scoreVMeasure: res.scoreVMeasure
+                    scoreVMeasure: res.scoreVMeasure,
+                    githubUrl: model.githubUrl,
+                    colabUrl: model.colabUrl,
+                    kaggleUrl: model.kaggleUrl,
+                    paperUrl: model.paperUrl,
+                    descriptionMarkdown: model.descriptionMarkdown,
+                    methodologyImages: model.methodologyImages,
+                    architectureFlow: model.architectureFlow,
+                    datasetName: section.name
                   });
                 });
               } else {
@@ -435,24 +484,34 @@ export default function Dashboard() {
                   scoreSilhouette: model.scoreSilhouette,
                   scoreAMI: model.scoreAMI,
                   scoreHomogeneity: model.scoreHomogeneity,
-                  scoreVMeasure: model.scoreVMeasure
+                  scoreVMeasure: model.scoreVMeasure,
+                  githubUrl: model.githubUrl,
+                  colabUrl: model.colabUrl,
+                  kaggleUrl: model.kaggleUrl,
+                  paperUrl: model.paperUrl,
+                  descriptionMarkdown: model.descriptionMarkdown,
+                  methodologyImages: model.methodologyImages,
+                  architectureFlow: model.architectureFlow,
+                  datasetName: section.name
                 });
               }
             });
 
-            // Sort by ARI descending, fall back to NMI, then Silhouette
+            // Sort by active tableSortMetric descending, falling back to other metrics
             sectionModels.sort((a, b) => {
-              const valA = a.scoreARI !== undefined && a.scoreARI !== null ? a.scoreARI : -1;
-              const valB = b.scoreARI !== undefined && b.scoreARI !== null ? b.scoreARI : -1;
-              if (valB !== valA) return valB - valA;
-              
-              const nmiA = a.scoreNMI !== undefined && a.scoreNMI !== null ? a.scoreNMI : -1;
-              const nmiB = b.scoreNMI !== undefined && b.scoreNMI !== null ? b.scoreNMI : -1;
-              if (nmiB !== nmiA) return nmiB - nmiA;
-              
-              const silA = a.scoreSilhouette !== undefined && a.scoreSilhouette !== null ? a.scoreSilhouette : -1;
-              const silB = b.scoreSilhouette !== undefined && b.scoreSilhouette !== null ? b.scoreSilhouette : -1;
-              return silB - silA;
+              const metricOrder = ['ARI', 'NMI', 'Silhouette'];
+              const reorderedMetrics = [
+                tableSortMetric,
+                ...metricOrder.filter(m => m !== tableSortMetric)
+              ];
+
+              for (const metric of reorderedMetrics) {
+                const field = metric === 'ARI' ? 'scoreARI' : metric === 'NMI' ? 'scoreNMI' : 'scoreSilhouette';
+                const valA = a[field] !== undefined && a[field] !== null ? a[field] : -1;
+                const valB = b[field] !== undefined && b[field] !== null ? b[field] : -1;
+                if (valB !== valA) return valB - valA;
+              }
+              return 0;
             });
 
             return (
@@ -479,78 +538,159 @@ export default function Dashboard() {
                   <table className="w-full text-left text-sm text-on-surface-variant border-collapse">
                     <thead className="bg-surface-container-low border-b border-outline-border text-xs uppercase font-semibold text-on-surface-variant tracking-wider font-outfit">
                       <tr>
+                        <th className="px-3 sm:px-6 py-3.5 sm:py-4 w-12 sm:w-14 text-center">Compare</th>
                         <th className="px-3 sm:px-6 py-3.5 sm:py-4 w-16 sm:w-20">Rank</th>
                         <th className="px-3 sm:px-6 py-3.5 sm:py-4">Model Name</th>
                         <th className="px-3 sm:px-6 py-3.5 sm:py-4 font-semibold text-center w-24">Clusters</th>
                         <th className="px-3 sm:px-6 py-3.5 sm:py-4">Author</th>
-                        <th className="px-3 sm:px-6 py-3.5 sm:py-4 font-bold text-primary text-center">ARI</th>
-                        <th className="px-3 sm:px-6 py-3.5 sm:py-4 font-bold text-secondary text-center">NMI</th>
-                        <th className="px-3 sm:px-6 py-3.5 sm:py-4 font-bold text-tertiary text-center">Silh.</th>
+                        <th 
+                          onClick={() => setTableSortMetric('ARI')}
+                          className="px-3 sm:px-6 py-3.5 sm:py-4 font-bold text-primary text-center cursor-pointer hover:bg-surface-container-high/60 select-none transition-colors"
+                          title="Click to Sort by ARI"
+                        >
+                          <div className="flex items-center justify-center gap-0.5">
+                            ARI {tableSortMetric === 'ARI' ? '↓' : ''}
+                          </div>
+                        </th>
+                        <th 
+                          onClick={() => setTableSortMetric('NMI')}
+                          className="px-3 sm:px-6 py-3.5 sm:py-4 font-bold text-secondary text-center cursor-pointer hover:bg-surface-container-high/60 select-none transition-colors"
+                          title="Click to Sort by NMI"
+                        >
+                          <div className="flex items-center justify-center gap-0.5">
+                            NMI {tableSortMetric === 'NMI' ? '↓' : ''}
+                          </div>
+                        </th>
+                        <th 
+                          onClick={() => setTableSortMetric('Silhouette')}
+                          className="px-3 sm:px-6 py-3.5 sm:py-4 font-bold text-tertiary text-center cursor-pointer hover:bg-surface-container-high/60 select-none transition-colors"
+                          title="Click to Sort by Silhouette"
+                        >
+                          <div className="flex items-center justify-center gap-0.5">
+                            Silh. {tableSortMetric === 'Silhouette' ? '↓' : ''}
+                          </div>
+                        </th>
                         <th className="px-3 sm:px-6 py-3.5 sm:py-4 text-right">Action</th>
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-outline-border">
-                      {sectionModels.map((model, index) => (
-                        <tr 
-                          key={model.resultKey} 
-                          className="hover:bg-primary-container/[0.04] transition-all group relative"
-                        >
-                          <td className="px-3 sm:px-6 py-3 sm:py-4 font-semibold relative">
-                            {/* Hover Selection bar */}
-                            <span className="absolute left-0 top-0 bottom-0 w-[4px] bg-primary-container opacity-0 group-hover:opacity-100 transition-opacity"></span>
-                            
-                            {index === 0 ? (
-                              <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] sm:text-xs font-bold bg-tertiary-container/10 text-tertiary border border-tertiary-container/30">
-                                <Trophy className="h-3 w-3 text-tertiary animate-pulse" />
-                                1st
-                              </span>
-                            ) : index === 1 ? (
-                              <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] sm:text-xs font-bold bg-secondary-container text-on-secondary-container border border-secondary-container/40">
-                                <Medal className="h-3 w-3" />
-                                2nd
-                              </span>
-                            ) : index === 2 ? (
-                              <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] sm:text-xs font-bold bg-surface-container-high text-on-surface-variant border border-outline">
-                                <Medal className="h-3 w-3 text-amber-700" />
-                                3rd
-                              </span>
-                            ) : (
-                              <span className="inline-flex items-center justify-center w-6 h-6 sm:w-7 sm:h-7 rounded-full text-[10px] sm:text-xs font-bold bg-surface-container-low text-on-surface-variant border border-outline-border">
-                                {index + 1}
-                              </span>
-                            )}
-                          </td>
-                          <td className="px-3 sm:px-6 py-3 sm:py-4 font-bold text-on-surface">
-                            <div className="flex items-center gap-1.5 text-xs sm:text-sm">
-                              <Cpu className="h-3.5 w-3.5 sm:h-4 sm:w-4 text-primary-container/85 shrink-0" />
-                              <span className="truncate max-w-[120px] sm:max-w-none">{model.name}</span>
-                            </div>
-                          </td>
-                          <td className="px-3 sm:px-6 py-3 sm:py-4 font-mono font-bold text-center text-xs sm:text-sm text-secondary">
-                            {model.clusterSize !== undefined && model.clusterSize !== null ? model.clusterSize : '-'}
-                          </td>
-                          <td className="px-3 sm:px-6 py-3 sm:py-4 text-xs sm:text-sm font-medium">{model.authorId?.name || 'Unknown'}</td>
-                          <td className="px-3 sm:px-6 py-3 sm:py-4 font-mono text-primary font-bold text-center text-xs sm:text-sm">
-                            {model.scoreARI !== undefined && model.scoreARI !== null ? model.scoreARI.toFixed(3) : '-'}
-                          </td>
-                          <td className="px-3 sm:px-6 py-3 sm:py-4 font-mono text-secondary font-bold text-center text-xs sm:text-sm">
-                            {model.scoreNMI !== undefined && model.scoreNMI !== null ? model.scoreNMI.toFixed(3) : '-'}
-                          </td>
-                          <td className="px-3 sm:px-6 py-3 sm:py-4 font-mono text-tertiary font-bold text-center text-xs sm:text-sm">
-                            {model.scoreSilhouette !== undefined && model.scoreSilhouette !== null ? model.scoreSilhouette.toFixed(3) : '-'}
-                          </td>
-
-                          <td className="px-3 sm:px-6 py-3 sm:py-4 text-right">
-                            <Link 
-                              href={`/models/${model._id}`}
-                              className="inline-flex items-center gap-0.5 sm:gap-1 text-primary-container hover:text-primary font-bold text-xs sm:text-sm transition-colors group/btn"
-                            >
-                              Details
-                              <ArrowRight className="h-3 w-3 sm:h-3.5 sm:w-3.5 transition-transform group-hover/btn:translate-x-1" />
-                            </Link>
+                      {sectionModels.length === 0 ? (
+                        <tr>
+                          <td colSpan={9} className="px-6 py-10 text-center italic text-xs text-on-surface-variant/80">
+                            No models or authors match search filter in this dataset.
                           </td>
                         </tr>
-                      ))}
+                      ) : (
+                        sectionModels.map((model, index) => (
+                          <tr 
+                            key={model.resultKey} 
+                            className="hover:bg-primary-container/[0.04] transition-all group relative"
+                          >
+                            <td className="px-3 sm:px-6 py-3 sm:py-4 text-center">
+                              <input
+                                type="checkbox"
+                                checked={selectedCompare.some(item => item.resultKey === model.resultKey)}
+                                onChange={() => handleCompareSelect(model)}
+                                className="h-3.5 w-3.5 accent-primary cursor-pointer border border-outline-border"
+                              />
+                            </td>
+                            <td className="px-3 sm:px-6 py-3 sm:py-4 font-semibold relative">
+                              {/* Hover Selection bar */}
+                              <span className="absolute left-0 top-0 bottom-0 w-[4px] bg-primary-container opacity-0 group-hover:opacity-100 transition-opacity"></span>
+                              
+                              {index === 0 ? (
+                                <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] sm:text-xs font-bold bg-tertiary-container/10 text-tertiary border border-tertiary-container/30">
+                                  <Trophy className="h-3 w-3 text-tertiary animate-pulse" />
+                                  1st
+                                </span>
+                              ) : index === 1 ? (
+                                <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] sm:text-xs font-bold bg-secondary-container text-on-secondary-container border border-secondary-container/40">
+                                  <Medal className="h-3 w-3" />
+                                  2nd
+                                </span>
+                              ) : index === 2 ? (
+                                <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] sm:text-xs font-bold bg-surface-container-high text-on-surface-variant border border-outline">
+                                  <Medal className="h-3 w-3 text-amber-700" />
+                                  3rd
+                                </span>
+                              ) : (
+                                <span className="inline-flex items-center justify-center w-6 h-6 sm:w-7 sm:h-7 rounded-full text-[10px] sm:text-xs font-bold bg-surface-container-low text-on-surface-variant border border-outline-border">
+                                  {index + 1}
+                                </span>
+                              )}
+                            </td>
+                            <td className="px-3 sm:px-6 py-3 sm:py-4 font-bold text-on-surface">
+                              <div className="flex flex-col gap-1 text-xs sm:text-sm">
+                                <div className="flex items-center gap-1.5 font-bold">
+                                  <Cpu className="h-3.5 w-3.5 sm:h-4 sm:w-4 text-primary-container/85 shrink-0" />
+                                  <span className="truncate max-w-[120px] sm:max-w-none">{model.name}</span>
+                                </div>
+                                <div className="flex items-center gap-1.5 flex-wrap">
+                                  {model.colabUrl && (
+                                    <a 
+                                      href={model.colabUrl} 
+                                      target="_blank" 
+                                      rel="noopener noreferrer" 
+                                      className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20 text-[9px] font-bold hover:underline font-outfit"
+                                      title="Run Google Colab notebook"
+                                    >
+                                      <Play className="h-2.5 w-2.5 fill-emerald-500/10 text-emerald-500 shrink-0" />
+                                      Colab
+                                    </a>
+                                  )}
+                                  {model.kaggleUrl && (
+                                    <a 
+                                      href={model.kaggleUrl} 
+                                      target="_blank" 
+                                      rel="noopener noreferrer" 
+                                      className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded bg-blue-500/10 text-blue-600 dark:text-blue-400 border border-blue-500/20 text-[9px] font-bold hover:underline font-outfit"
+                                      title="Sandbox Kaggle notebook"
+                                    >
+                                      <Terminal className="h-2.5 w-2.5 text-blue-500 shrink-0" />
+                                      Kaggle
+                                    </a>
+                                  )}
+                                  {model.githubUrl && (
+                                    <a 
+                                      href={model.githubUrl} 
+                                      target="_blank" 
+                                      rel="noopener noreferrer" 
+                                      className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded bg-surface-container-high text-on-surface-variant border border-outline-border text-[9px] font-bold hover:underline font-outfit"
+                                      title="Source Code Repository"
+                                    >
+                                      <Code className="h-2.5 w-2.5 shrink-0" />
+                                      GitHub
+                                    </a>
+                                  )}
+                                </div>
+                              </div>
+                            </td>
+                            <td className="px-3 sm:px-6 py-3 sm:py-4 font-mono font-bold text-center text-xs sm:text-sm text-secondary">
+                              {model.clusterSize !== undefined && model.clusterSize !== null ? model.clusterSize : '-'}
+                            </td>
+                            <td className="px-3 sm:px-6 py-3 sm:py-4 text-xs sm:text-sm font-medium">{model.authorId?.name || 'Unknown'}</td>
+                            <td className="px-3 sm:px-6 py-3 sm:py-4 font-mono text-primary font-bold text-center text-xs sm:text-sm">
+                              {model.scoreARI !== undefined && model.scoreARI !== null ? model.scoreARI.toFixed(3) : '-'}
+                            </td>
+                            <td className="px-3 sm:px-6 py-3 sm:py-4 font-mono text-secondary font-bold text-center text-xs sm:text-sm">
+                              {model.scoreNMI !== undefined && model.scoreNMI !== null ? model.scoreNMI.toFixed(3) : '-'}
+                            </td>
+                            <td className="px-3 sm:px-6 py-3 sm:py-4 font-mono text-tertiary font-bold text-center text-xs sm:text-sm">
+                              {model.scoreSilhouette !== undefined && model.scoreSilhouette !== null ? model.scoreSilhouette.toFixed(3) : '-'}
+                            </td>
+  
+                            <td className="px-3 sm:px-6 py-3 sm:py-4 text-right">
+                              <Link 
+                                href={`/models/${model._id}`}
+                                className="inline-flex items-center gap-0.5 sm:gap-1 text-primary-container hover:text-primary font-bold text-xs sm:text-sm transition-colors group/btn"
+                              >
+                                Details
+                                <ArrowRight className="h-3 w-3 sm:h-3.5 sm:w-3.5 transition-transform group-hover/btn:translate-x-1" />
+                              </Link>
+                            </td>
+                          </tr>
+                        ))
+                      )}
                     </tbody>
                   </table>
                 </div>
@@ -559,6 +699,217 @@ export default function Dashboard() {
           })}
         </div>
       )}
+
+      {/* Floating Model Comparison Bar Drawer */}
+      {selectedCompare.length > 0 && (
+        <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-40 bg-surface-container border border-outline-border rounded-full py-3 px-6 shadow-lg flex items-center justify-between gap-6 animate-in slide-in-from-bottom-6 duration-300 w-[92%] max-w-2xl">
+          <div className="flex items-center gap-3 min-w-0">
+            <span className="text-xs font-bold text-on-surface-variant font-outfit hidden md:inline shrink-0">
+              {selectedCompare.length === 1 
+                ? "Select 1 more model..." 
+                : "Ready to compare!"}
+            </span>
+            <div className="flex items-center gap-1.5 overflow-x-auto scrollbar-none py-0.5 min-w-0 pr-2">
+              {selectedCompare.map(m => (
+                <span key={m.resultKey} className="px-2.5 py-1 bg-primary text-white text-[10px] md:text-xs font-bold rounded-full font-outfit flex items-center gap-1.5 shrink-0 shadow-sm border border-primary-container/20">
+                  <span className="truncate max-w-[80px] md:max-w-[120px]">{m.name} (K={m.clusterSize})</span>
+                  <button 
+                    type="button"
+                    onClick={() => handleCompareSelect(m)} 
+                    className="hover:text-error-container hover:bg-white/10 rounded-full h-3.5 w-3.5 flex items-center justify-center cursor-pointer font-bold select-none text-[8px]"
+                  >
+                    ✕
+                  </button>
+                </span>
+              ))}
+            </div>
+          </div>
+          <div className="flex items-center gap-2 shrink-0">
+            {selectedCompare.length === 2 && (
+              <button
+                type="button"
+                onClick={() => setCompareModalOpen(true)}
+                className="bg-emerald-600 hover:bg-emerald-500 text-white text-[10px] md:text-xs font-extrabold px-4 py-1.5 rounded-full transition-all cursor-pointer shadow-sm hover:shadow active:scale-95"
+              >
+                Compare
+              </button>
+            )}
+            <button
+              type="button"
+              onClick={() => setSelectedCompare([])}
+              className="p-1 rounded-full hover:bg-surface-container-high text-on-surface-variant/80 hover:text-on-surface cursor-pointer"
+              title="Clear Selection"
+            >
+              <X className="h-4 w-4" />
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* Side-by-Side Model Comparison Modal */}
+      {compareModalOpen && selectedCompare.length === 2 && (() => {
+        const modelA = selectedCompare[0];
+        const modelB = selectedCompare[1];
+
+        const getDeltaStyle = (val) => {
+          if (val === null || val === undefined || Math.abs(val) < 0.0001) return 'text-on-surface-variant/70 font-semibold';
+          return val > 0 ? 'text-emerald-600 dark:text-emerald-400 font-extrabold' : 'text-error font-extrabold';
+        };
+
+        const renderDelta = (valA, valB) => {
+          if (valA === undefined || valA === null || valB === undefined || valB === null) return '-';
+          const diff = valA - valB;
+          const displayDiff = diff > 0 ? `+${diff.toFixed(3)}` : diff.toFixed(3);
+          return <span className={getDeltaStyle(diff)}>{displayDiff}</span>;
+        };
+
+        return (
+          <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-xs flex items-center justify-center p-4 overflow-y-auto">
+            <div className="bg-surface-container-lowest border border-outline-border w-full max-w-4xl rounded-lg shadow-xl overflow-hidden flex flex-col max-h-[90vh] animate-in fade-in zoom-in-95 duration-200">
+              {/* Modal Header */}
+              <div className="flex items-center justify-between px-6 py-4 border-b border-outline-border/60 bg-surface-container-low shrink-0">
+                <h3 className="text-base md:text-lg font-bold text-on-surface flex items-center gap-2 font-outfit">
+                  <BarChart3 className="h-5 w-5 text-primary" />
+                  Comparative Benchmarking Analysis
+                </h3>
+                <button
+                  type="button"
+                  onClick={() => setCompareModalOpen(false)}
+                  className="p-1.5 rounded-full hover:bg-surface-container-high text-on-surface-variant/80 hover:text-on-surface cursor-pointer transition-colors"
+                >
+                  <X className="h-5 w-5" />
+                </button>
+              </div>
+
+              {/* Modal Body */}
+              <div className="flex-1 overflow-y-auto p-6 space-y-6">
+                {/* Meta Column Grid */}
+                <div className="grid grid-cols-2 gap-4 border-b border-outline-border/40 pb-6">
+                  <div className="bg-surface-container-low/40 border border-outline-border/60 rounded-default p-4 space-y-2">
+                    <span className="px-2 py-0.5 rounded bg-primary/10 text-primary border border-primary/20 text-[9px] font-bold uppercase tracking-wider font-outfit">Model A</span>
+                    <h4 className="text-base font-extrabold text-on-surface flex items-center gap-1">
+                      <Cpu className="h-4.5 w-4.5 text-primary" />
+                      {modelA.name}
+                    </h4>
+                    <p className="text-xs text-on-surface-variant font-medium">Dataset: <span className="font-bold text-on-surface">{modelA.datasetName}</span></p>
+                    <p className="text-xs text-on-surface-variant font-medium">Cluster Config: <span className="font-bold text-on-surface">{modelA.clusterSize} Clusters</span></p>
+                    <p className="text-xs text-on-surface-variant font-medium">Author: <span className="font-semibold">{modelA.authorId?.name || 'Unknown'}</span></p>
+                  </div>
+                  
+                  <div className="bg-surface-container-low/40 border border-outline-border/60 rounded-default p-4 space-y-2">
+                    <span className="px-2 py-0.5 rounded bg-secondary/10 text-secondary border border-secondary/20 text-[9px] font-bold uppercase tracking-wider font-outfit">Model B</span>
+                    <h4 className="text-base font-extrabold text-on-surface flex items-center gap-1">
+                      <Cpu className="h-4.5 w-4.5 text-secondary" />
+                      {modelB.name}
+                    </h4>
+                    <p className="text-xs text-on-surface-variant font-medium">Dataset: <span className="font-bold text-on-surface">{modelB.datasetName}</span></p>
+                    <p className="text-xs text-on-surface-variant font-medium">Cluster Config: <span className="font-bold text-on-surface">{modelB.clusterSize} Clusters</span></p>
+                    <p className="text-xs text-on-surface-variant font-medium">Author: <span className="font-semibold">{modelB.authorId?.name || 'Unknown'}</span></p>
+                  </div>
+                </div>
+
+                {/* Score Comparison Matrix */}
+                <div className="space-y-3">
+                  <h4 className="text-xs font-bold uppercase tracking-wider text-on-surface-variant font-outfit">Metrics Delta Matrix (A vs B)</h4>
+                  <div className="overflow-x-auto rounded-default border border-outline-border bg-surface-container-lowest">
+                    <table className="w-full text-left text-xs border-collapse">
+                      <thead className="bg-surface-container-low border-b border-outline-border font-semibold font-outfit text-on-surface-variant/90 uppercase tracking-wider">
+                        <tr>
+                          <th className="px-4 py-3">Metric Name</th>
+                          <th className="px-4 py-3 text-center w-28 text-primary">Model A</th>
+                          <th className="px-4 py-3 text-center w-28 text-secondary">Model B</th>
+                          <th className="px-4 py-3 text-center w-28">Delta (A - B)</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-outline-border/50 font-medium text-on-surface-variant">
+                        {[
+                          { label: 'ARI (Adjusted Rand Index)', key: 'scoreARI', isPrimary: true },
+                          { label: 'NMI (Normalized Mutual Info)', key: 'scoreNMI', isPrimary: true },
+                          { label: 'Silhouette Coefficient', key: 'scoreSilhouette', isPrimary: true },
+                          { label: 'AMI (Adjusted Mutual Info)', key: 'scoreAMI' },
+                          { label: 'Homogeneity Score', key: 'scoreHomogeneity' },
+                          { label: 'V-Measure Score', key: 'scoreVMeasure' },
+                        ].map((m) => {
+                          const valA = modelA[m.key];
+                          const valB = modelB[m.key];
+                          return (
+                            <tr key={m.key} className={m.isPrimary ? 'bg-surface-container-low/20 font-bold' : ''}>
+                              <td className="px-4 py-3 text-on-surface">{m.label}</td>
+                              <td className="px-4 py-3 text-center font-mono text-xs">{valA !== undefined && valA !== null ? valA.toFixed(3) : '-'}</td>
+                              <td className="px-4 py-3 text-center font-mono text-xs">{valB !== undefined && valB !== null ? valB.toFixed(3) : '-'}</td>
+                              <td className="px-4 py-3 text-center font-mono text-xs">{renderDelta(valA, valB)}</td>
+                            </tr>
+                          );
+                        })}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+
+                {/* Notebook / Badge Links Comparison */}
+                <div className="grid grid-cols-2 gap-4 border-t border-outline-border/40 pt-4">
+                  <div className="space-y-2">
+                    <span className="text-[10px] uppercase font-bold text-on-surface-variant/80 font-outfit">Model A Notebooks</span>
+                    <div className="flex flex-wrap gap-2">
+                      {modelA.colabUrl ? (
+                        <a href={modelA.colabUrl} target="_blank" rel="noopener noreferrer" className="px-3 py-1.5 rounded-default bg-emerald-500/10 hover:bg-emerald-500/25 border border-emerald-500/30 text-emerald-600 dark:text-emerald-400 text-xs font-bold flex items-center gap-1.5 transition-all">
+                          <Play className="h-3.5 w-3.5 text-emerald-500 animate-pulse" /> Google Colab
+                        </a>
+                      ) : <span className="text-xs text-on-surface-variant/50 italic">No Colab provided</span>}
+                      {modelA.kaggleUrl ? (
+                        <a href={modelA.kaggleUrl} target="_blank" rel="noopener noreferrer" className="px-3 py-1.5 rounded-default bg-blue-500/10 hover:bg-blue-500/25 border border-blue-500/30 text-blue-600 dark:text-blue-400 text-xs font-bold flex items-center gap-1.5 transition-all">
+                          <Terminal className="h-3.5 w-3.5 text-blue-500" /> Kaggle Notebook
+                        </a>
+                      ) : null}
+                    </div>
+                  </div>
+
+                  <div className="space-y-2">
+                    <span className="text-[10px] uppercase font-bold text-on-surface-variant/80 font-outfit">Model B Notebooks</span>
+                    <div className="flex flex-wrap gap-2">
+                      {modelB.colabUrl ? (
+                        <a href={modelB.colabUrl} target="_blank" rel="noopener noreferrer" className="px-3 py-1.5 rounded-default bg-emerald-500/10 hover:bg-emerald-500/25 border border-emerald-500/30 text-emerald-600 dark:text-emerald-400 text-xs font-bold flex items-center gap-1.5 transition-all">
+                          <Play className="h-3.5 w-3.5 text-emerald-500 animate-pulse" /> Google Colab
+                        </a>
+                      ) : <span className="text-xs text-on-surface-variant/50 italic">No Colab provided</span>}
+                      {modelB.kaggleUrl ? (
+                        <a href={modelB.kaggleUrl} target="_blank" rel="noopener noreferrer" className="px-3 py-1.5 rounded-default bg-blue-500/10 hover:bg-blue-500/25 border border-blue-500/30 text-blue-600 dark:text-blue-400 text-xs font-bold flex items-center gap-1.5 transition-all">
+                          <Terminal className="h-3.5 w-3.5 text-blue-500" /> Kaggle Notebook
+                        </a>
+                      ) : null}
+                    </div>
+                  </div>
+                </div>
+
+                {/* Methodology Figure comparison */}
+                {((modelA.methodologyImages && modelA.methodologyImages.length > 0) || 
+                  (modelB.methodologyImages && modelB.methodologyImages.length > 0)) && (
+                  <div className="space-y-3 border-t border-outline-border/40 pt-4">
+                    <h4 className="text-xs font-bold uppercase tracking-wider text-on-surface-variant font-outfit">Methodology Graph comparison</h4>
+                    <div className="grid grid-cols-2 gap-4">
+                      <div>
+                        {modelA.methodologyImages && modelA.methodologyImages.length > 0 ? (
+                          <div className="border border-outline-border rounded-default overflow-hidden bg-surface-container-low max-h-48 flex items-center justify-center">
+                            <img src={modelA.methodologyImages[0]} alt={modelA.name} className="max-h-48 w-full object-contain" />
+                          </div>
+                        ) : <div className="border border-dashed border-outline-variant/60 rounded-default h-32 flex items-center justify-center text-xs italic text-on-surface-variant/50">No Methodology Figure</div>}
+                      </div>
+
+                      <div>
+                        {modelB.methodologyImages && modelB.methodologyImages.length > 0 ? (
+                          <div className="border border-outline-border rounded-default overflow-hidden bg-surface-container-low max-h-48 flex items-center justify-center">
+                            <img src={modelB.methodologyImages[0]} alt={modelB.name} className="max-h-48 w-full object-contain" />
+                          </div>
+                        ) : <div className="border border-dashed border-outline-variant/60 rounded-default h-32 flex items-center justify-center text-xs italic text-on-surface-variant/50">No Methodology Figure</div>}
+                      </div>
+                    </div>
+                  </div>
+                )}
+              </div>
+            </div>
+          </div>
+        );
+      })()}
     </div>
   );
 }
