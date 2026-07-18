@@ -11,7 +11,7 @@ import mermaid from 'mermaid';
 import { useAuth } from '@/context/AuthContext';
 import { usePopup } from '@/context/PopupContext';
 import { useData } from '@/context/DataContext';
-import { Edit2, Trash2, Check, X, Eye, EyeOff, Edit3, ChevronsUpDown, Search, Image, ArrowLeft, Cpu, Layers, BookOpen, AlertTriangle, Code, ExternalLink, Info } from 'lucide-react';
+import { Edit2, Trash2, Check, X, Eye, EyeOff, Edit3, ChevronsUpDown, Search, Image, ArrowLeft, Cpu, Layers, BookOpen, AlertTriangle, Code, ExternalLink, Info, RefreshCw } from 'lucide-react';
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || '/api';
 
@@ -69,6 +69,7 @@ export default function ModelDetail() {
 
   const [model, setModel] = useState(null);
   const [loading, setLoading] = useState(true);
+  const [togglingSize, setTogglingSize] = useState(null);
   
   // Editing states
   const [isEditing, setIsEditing] = useState(false);
@@ -405,7 +406,8 @@ export default function ModelDetail() {
   };
 
   const toggleResultVisibility = async (clusterSize) => {
-    if (isSaving) return;
+    if (isSaving || togglingSize !== null) return;
+    setTogglingSize(clusterSize);
 
     const updatedResults = model.results.map((res) => {
       if (res.clusterSize === clusterSize) {
@@ -432,6 +434,8 @@ export default function ModelDetail() {
       console.error('Error toggling visibility:', error);
       const errMsg = error.response?.data?.message || 'Failed to update visibility.';
       await showAlert('Visibility Update Failed', errMsg, 'error');
+    } finally {
+      setTogglingSize(null);
     }
   };
 
@@ -583,10 +587,13 @@ export default function ModelDetail() {
                           <button
                             type="button"
                             onClick={() => toggleResultVisibility(res.clusterSize)}
-                            className="text-on-surface-variant hover:text-primary transition-colors cursor-pointer p-1 rounded-default hover:bg-surface-container flex items-center justify-center shrink-0 border border-outline-border/30"
+                            disabled={togglingSize !== null}
+                            className="text-on-surface-variant hover:text-primary transition-colors cursor-pointer p-1 rounded-default hover:bg-surface-container flex items-center justify-center shrink-0 border border-outline-border/30 disabled:opacity-50 disabled:cursor-not-allowed"
                             title={res.visible === false ? "Show on Leaderboard" : "Hide from Leaderboard"}
                           >
-                            {res.visible === false ? (
+                            {togglingSize === res.clusterSize ? (
+                              <RefreshCw className="h-3.5 w-3.5 animate-spin text-primary" />
+                            ) : res.visible === false ? (
                               <EyeOff className="h-3.5 w-3.5 text-error" />
                             ) : (
                               <Eye className="h-3.5 w-3.5 text-primary" />
