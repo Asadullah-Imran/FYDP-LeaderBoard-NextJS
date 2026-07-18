@@ -870,7 +870,7 @@ export default function ModelDetail() {
             <div className="prose max-w-none">
               <h2 className="text-xl font-bold font-outfit border-b border-outline-border pb-2.5 mb-6 text-on-surface flex items-center gap-2">
                 <BookOpen className="h-5 w-5 text-primary-container" />
-                Mathematical Methodology
+                Methodology
               </h2>
               <div className="text-on-surface-variant leading-relaxed text-sm space-y-4">
                 <ReactMarkdown 

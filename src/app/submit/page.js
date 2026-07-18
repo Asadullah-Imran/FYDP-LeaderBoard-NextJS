@@ -54,8 +54,10 @@ const parseRawMetrics = (text) => {
 export default function SubmitModel() {
   const { user, loading: authLoading } = useAuth();
   const { showAlert } = usePopup();
-  const { clearCache } = useData();
+  const { clearCache, models, fetchGlobalData, globalLoading } = useData();
   const router = useRouter();
+
+  const [existingImages, setExistingImages] = useState([]);
 
   // Route protection
   useEffect(() => {
@@ -97,8 +99,36 @@ export default function SubmitModel() {
   // Markdown live preview tab state
   const [activeTab, setActiveTab] = useState('write'); // 'write' | 'preview'
 
+  const handlePreFillModel = (modelId) => {
+    const selected = (models || []).find(m => m._id === modelId);
+    if (!selected) return;
+
+    setFormData(prev => ({
+      ...prev,
+      name: selected.name,
+      descriptionMarkdown: selected.descriptionMarkdown,
+      architectureFlow: selected.architectureFlow || '',
+      githubUrl: selected.githubUrl || '',
+      colabUrl: '',
+      kaggleUrl: '',
+      paperUrl: selected.paperUrl || '',
+    }));
+
+    if (selected.methodologyImages && selected.methodologyImages.length > 0) {
+      setExistingImages(selected.methodologyImages);
+    } else {
+      setExistingImages([]);
+    }
+  };
+
+  const handleRemoveExistingImage = (idxToRemove) => {
+    setExistingImages(prev => prev.filter((_, idx) => idx !== idxToRemove));
+  };
+
   useEffect(() => {
     if (!user) return;
+    fetchGlobalData(); // Ensure global models cache is loaded when accessing submit page directly
+    
     // Fetch sections on mount
     const fetchSections = async () => {
       try {
@@ -250,7 +280,7 @@ export default function SubmitModel() {
       const modelPayload = {
         ...formData,
         results: parsedResults,
-        methodologyImages: imageUrls
+        methodologyImages: [...existingImages, ...imageUrls]
       };
 
       await axios.post(`${API_URL}/models`, modelPayload, {
@@ -284,6 +314,16 @@ export default function SubmitModel() {
     section.name.toLowerCase().includes(searchQuery.toLowerCase())
   );
 
+  const uniqueModelProfiles = [];
+  const seenNames = new Set();
+  (models || []).forEach(m => {
+    const nameLower = m.name.toLowerCase().trim();
+    if (!seenNames.has(nameLower)) {
+      seenNames.add(nameLower);
+      uniqueModelProfiles.push(m);
+    }
+  });
+
   return (
     <div className="max-w-3xl mx-auto space-y-6">
       {/* Back button */}
@@ -308,6 +348,35 @@ export default function SubmitModel() {
             Register your spatial multi-omics model benchmarks, ablation statistics, and mathematical methodology.
           </p>
         </div>
+
+        {globalLoading && models.length === 0 ? (
+          <div className="bg-surface-container-low border border-outline-border p-4.5 rounded-default mb-6 space-y-2.5 animate-pulse">
+            <div className="h-3 bg-surface-container-high rounded w-48"></div>
+            <div className="h-9 bg-surface-container-lowest border border-outline-border rounded-default w-full"></div>
+            <div className="h-2.5 bg-surface-container-high rounded w-72"></div>
+          </div>
+        ) : uniqueModelProfiles.length > 0 ? (
+          <div className="bg-surface-container-low border border-outline-border p-4.5 rounded-default mb-6 space-y-2 animate-in fade-in duration-200">
+            <label className="block text-xs font-bold uppercase tracking-wider text-on-surface-variant font-outfit">
+              Auto-Populate Metadata from Previous Submissions
+            </label>
+            <select
+              onChange={(e) => handlePreFillModel(e.target.value)}
+              className="w-full bg-surface-container-lowest border border-outline-border rounded-default px-3 py-2 text-on-surface text-sm font-semibold focus:outline-none focus:border-primary focus:ring-2 focus:ring-primary/20 transition-all cursor-pointer"
+              defaultValue=""
+            >
+              <option value="" disabled>-- Select an existing model profile to copy details --</option>
+              {uniqueModelProfiles.map(m => (
+                <option key={m._id} value={m._id}>
+                  {m.name} (by {m.authorId?.name || 'Unknown'})
+                </option>
+              ))}
+            </select>
+            <p className="text-[10px] text-on-surface-variant italic">
+              * Choosing a model copies its Methodology text, flowchart diagrams, gallery illustrations, and source repository/Colab links.
+            </p>
+          </div>
+        ) : null}
         
         <form onSubmit={handleSubmit} className="space-y-6">
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
@@ -629,6 +698,27 @@ export default function SubmitModel() {
               Methodology Images (Gallery Upload) - Multiple Allowed
             </label>
             
+            {existingImages.length > 0 && (
+              <div className="space-y-2 mb-4">
+                <span className="block text-[10px] font-bold text-on-surface-variant uppercase tracking-wider font-outfit">Pre-existing copied gallery images:</span>
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                  {existingImages.map((url, idx) => (
+                    <div key={idx} className="relative group border border-outline-border rounded-default overflow-hidden h-24 bg-surface-container-low shadow-sm">
+                      <img src={url} alt={`Pre-existing copied gallery image ${idx + 1}`} className="w-full h-full object-cover" />
+                      <button
+                        type="button"
+                        onClick={() => handleRemoveExistingImage(idx)}
+                        className="absolute inset-0 bg-black/60 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity text-white hover:text-error-container font-extrabold text-xs cursor-pointer gap-1"
+                      >
+                        <Trash2 className="h-4 w-4 text-error" />
+                        Remove
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
             {imageFiles.length > 0 && (
               <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-4">
                 {imageFiles.map((file, idx) => {
