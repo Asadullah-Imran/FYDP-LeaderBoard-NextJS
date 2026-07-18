@@ -1,7 +1,7 @@
 'use client';
 import React, { useEffect, useState, useRef } from 'react';
 import Link from 'next/link';
-import { Trophy, Medal, ArrowRight, Sparkles, AlertCircle, Cpu, BarChart3, ChevronsUpDown, X, Play, Terminal, Code, Search } from 'lucide-react';
+import { Trophy, Medal, ArrowRight, Sparkles, AlertCircle, Cpu, BarChart3, ChevronsUpDown, X, Play, Terminal, Code, Search, ChevronDown, ChevronUp } from 'lucide-react';
 import { useData } from '@/context/DataContext';
 import { usePopup } from '@/context/PopupContext';
 
@@ -14,6 +14,8 @@ export default function Dashboard() {
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedCompare, setSelectedCompare] = useState([]);
   const [compareModalOpen, setCompareModalOpen] = useState(false);
+  const [overallPerformanceExpanded, setOverallPerformanceExpanded] = useState(false); // Default minimized/collapsed
+  const [collapsedSections, setCollapsedSections] = useState({}); // Default expanded (empty = expanded)
   
   // Multi-select dataset filters
   const [selectedDatasets, setSelectedDatasets] = useState([]);
@@ -77,6 +79,13 @@ export default function Dashboard() {
       return;
     }
     setSelectedCompare(prev => [...prev, model]);
+  };
+
+  const toggleSectionCollapse = (sectionId) => {
+    setCollapsedSections(prev => ({
+      ...prev,
+      [sectionId]: !prev[sectionId]
+    }));
   };
 
   // Compute overall performance of models across all datasets
@@ -278,161 +287,175 @@ export default function Dashboard() {
             <div className="bg-surface-container-lowest border border-outline-border rounded-lg p-6 md:p-8 shadow-sm relative overflow-hidden transition-all duration-300">
               <div className="absolute top-0 left-0 right-0 h-1 bg-gradient-to-r from-primary via-primary-container to-secondary"></div>
               
-              <div className="flex flex-col md:flex-row md:items-center justify-between gap-6 mb-8">
-                <div className="space-y-1.5">
-                  <h2 className="text-xl md:text-2xl font-bold text-on-surface flex items-center gap-2.5 font-outfit">
-                    <BarChart3 className="h-5.5 w-5.5 text-primary" />
-                    Overall Model Performance
-                  </h2>
+              <div className={`flex flex-col md:flex-row md:items-center justify-between gap-6 ${overallPerformanceExpanded ? 'mb-8' : 'mb-0'}`}>
+                <div className="space-y-1.5 flex-1">
+                  <div className="flex items-center gap-4">
+                    <h2 className="text-xl md:text-2xl font-bold text-on-surface flex items-center gap-2.5 font-outfit">
+                      <BarChart3 className="h-5.5 w-5.5 text-primary" />
+                      Overall Model Performance
+                    </h2>
+                    <button
+                      type="button"
+                      onClick={() => setOverallPerformanceExpanded(!overallPerformanceExpanded)}
+                      className="inline-flex items-center gap-1 px-3 py-1 bg-surface-container-low hover:bg-surface-container-high rounded-full text-xs font-bold text-on-surface-variant hover:text-on-surface border border-outline-border cursor-pointer transition-all active:scale-95 shrink-0"
+                    >
+                      {overallPerformanceExpanded ? (
+                        <>
+                          <ChevronUp className="h-4 w-4" /> Minimize
+                        </>
+                      ) : (
+                        <>
+                          <ChevronDown className="h-4 w-4" /> Expand Chart
+                        </>
+                      )}
+                    </button>
+                  </div>
                   <p className="text-xs text-on-surface-variant leading-normal max-w-xl">
                     Aggregated benchmarks comparison of model submissions across all dataset categories, sorted by their average metric scores.
                   </p>
                 </div>
                 
-                <div className="flex flex-col sm:flex-row gap-3 items-start sm:items-center self-start md:self-auto">
-                  {/* Multi-Select Dataset Checkbox Dropdown */}
-                  <div className="relative self-stretch sm:self-auto" ref={filterDropdownRef}>
-                    <button
-                      type="button"
-                      onClick={() => setFilterDropdownOpen(!filterDropdownOpen)}
-                      className="flex items-center justify-between bg-surface-container-low px-3 py-1.5 rounded-default border border-outline-border text-xs font-bold text-on-surface hover:border-primary cursor-pointer select-none gap-2 self-stretch sm:self-auto min-w-[170px] w-full sm:w-auto"
-                    >
-                      <span className="truncate max-w-[140px]">
-                        {selectedDatasets.length === nonEmptySections.length 
-                          ? 'All Datasets Selected' 
-                          : selectedDatasets.length === 0 
-                          ? 'No Datasets Selected' 
-                          : `${selectedDatasets.length} of ${nonEmptySections.length} Datasets`}
-                      </span>
-                      <ChevronsUpDown className="h-3.5 w-3.5 text-on-surface-variant shrink-0" />
-                    </button>
+                {overallPerformanceExpanded && (
+                  <div className="flex flex-col sm:flex-row gap-3 items-start sm:items-center self-start md:self-auto shrink-0">
+                    {/* Multi-Select Dataset Checkbox Dropdown */}
+                    <div className="relative self-stretch sm:self-auto" ref={filterDropdownRef}>
+                      <button
+                        type="button"
+                        onClick={() => setFilterDropdownOpen(!filterDropdownOpen)}
+                        className="flex items-center justify-between bg-surface-container-low px-3 py-1.5 rounded-default border border-outline-border text-xs font-bold text-on-surface hover:border-primary cursor-pointer select-none gap-2 self-stretch sm:self-auto min-w-[170px] w-full sm:w-auto"
+                      >
+                        <span className="truncate max-w-[140px]">
+                          {selectedDatasets.length === nonEmptySections.length 
+                            ? 'All Datasets Selected' 
+                            : selectedDatasets.length === 0 
+                            ? 'No Datasets Selected' 
+                            : `${selectedDatasets.length} of ${nonEmptySections.length} Datasets`}
+                        </span>
+                        <ChevronsUpDown className="h-3.5 w-3.5 text-on-surface-variant shrink-0" />
+                      </button>
 
-                    {filterDropdownOpen && (
-                      <div className="absolute left-0 sm:right-0 sm:left-auto mt-1.5 z-50 w-64 bg-surface-container-lowest border border-outline-border rounded-default shadow-[0px_4px_20px_rgba(15,23,42,0.08)] overflow-hidden p-2.5 space-y-2 animate-in fade-in slide-in-from-top-1 duration-150">
-                        <div className="flex items-center justify-between px-1">
-                          <span className="text-[9px] uppercase font-extrabold text-on-surface-variant font-outfit">Filter Datasets</span>
-                          <button
-                            type="button"
-                            onClick={toggleAllDatasets}
-                            className="text-[9px] uppercase font-bold text-primary hover:underline cursor-pointer bg-transparent border-none p-0"
-                          >
-                            {selectedDatasets.length === nonEmptySections.length ? 'Deselect All' : 'Select All'}
-                          </button>
+                      {filterDropdownOpen && (
+                        <div className="absolute left-0 sm:right-0 sm:left-auto mt-1.5 z-50 w-64 bg-surface-container-lowest border border-outline-border rounded-default shadow-[0px_4px_20px_rgba(15,23,42,0.08)] overflow-hidden p-2.5 space-y-2 animate-in fade-in slide-in-from-top-1 duration-150">
+                          <div className="flex items-center justify-between px-1">
+                            <span className="text-[9px] uppercase font-extrabold text-on-surface-variant font-outfit">Filter Datasets</span>
+                            <button
+                              type="button"
+                              onClick={toggleAllDatasets}
+                              className="text-[9px] uppercase font-bold text-primary hover:underline cursor-pointer bg-transparent border-none p-0"
+                            >
+                              {selectedDatasets.length === nonEmptySections.length ? 'Deselect All' : 'Select All'}
+                            </button>
+                          </div>
+                          
+                          <div className="h-px bg-outline-border/60"></div>
+                          
+                          <ul className="max-h-56 overflow-y-auto space-y-0.5 pr-1">
+                            {nonEmptySections.map((sec) => {
+                              const isChecked = selectedDatasets.includes(sec._id);
+                              return (
+                                <li key={sec._id}>
+                                  <label className="flex items-center gap-2.5 px-2 py-1.5 rounded-default hover:bg-surface-container-low cursor-pointer text-xs font-semibold text-on-surface select-none transition-colors">
+                                    <input
+                                      type="checkbox"
+                                      checked={isChecked}
+                                      onChange={() => toggleDatasetSelection(sec._id)}
+                                      className="h-3.5 w-3.5 accent-primary cursor-pointer rounded border-outline-border"
+                                    />
+                                    <span className="truncate">{sec.name}</span>
+                                  </label>
+                                </li>
+                              );
+                            })}
+                          </ul>
                         </div>
-                        
-                        <div className="h-px bg-outline-border/60"></div>
-                        
-                        <ul className="max-h-56 overflow-y-auto space-y-0.5 pr-1">
-                          {nonEmptySections.map((sec) => {
-                            const isChecked = selectedDatasets.includes(sec._id);
-                            return (
-                              <li key={sec._id}>
-                                <label className="flex items-center gap-2.5 px-2 py-1.5 rounded-default hover:bg-surface-container-low cursor-pointer text-xs font-semibold text-on-surface select-none transition-colors">
-                                  <input
-                                    type="checkbox"
-                                    checked={isChecked}
-                                    onChange={() => toggleDatasetSelection(sec._id)}
-                                    className="h-3.5 w-3.5 accent-primary cursor-pointer rounded border-outline-border"
-                                  />
-                                  <span className="truncate">{sec.name}</span>
-                                </label>
-                              </li>
-                            );
-                          })}
-                        </ul>
-                      </div>
-                    )}
-                  </div>
+                      )}
+                    </div>
 
-                  {/* Metric Selector Tabs */}
-                  <div className="flex bg-surface-container-low p-1 rounded-default border border-outline-border self-stretch sm:self-auto shrink-0 justify-center">
-                    {['ARI', 'NMI', 'Silhouette'].map((metric) => {
-                      const isActive = metricTab === metric;
-                      let activeBtnStyle = 'bg-primary text-white shadow-sm';
-                      if (metric === 'NMI') activeBtnStyle = 'bg-secondary text-white shadow-sm';
-                      if (metric === 'Silhouette') activeBtnStyle = 'bg-tertiary text-white shadow-sm';
-                      
-                      return (
-                        <button
-                          key={metric}
-                          type="button"
-                          onClick={() => setMetricTab(metric)}
-                          className={`px-4 py-1.5 rounded-default text-xs font-bold uppercase tracking-wider cursor-pointer transition-all ${
-                            isActive
-                              ? activeBtnStyle
-                              : 'text-on-surface-variant hover:text-on-surface hover:bg-surface-container-high'
-                          }`}
-                        >
-                          {metric}
-                        </button>
-                      );
-                    })}
+                    {/* Metric Selector Tabs */}
+                    <div className="flex bg-surface-container-low p-1 rounded-default border border-outline-border self-stretch sm:self-auto shrink-0 justify-center">
+                      {['ARI', 'NMI', 'Silhouette'].map((metric) => {
+                        const isActive = metricTab === metric;
+                        return (
+                          <button
+                            key={metric}
+                            type="button"
+                            onClick={() => setMetricTab(metric)}
+                            className="px-4 py-1.5 rounded-default text-xs font-bold uppercase tracking-wider cursor-pointer transition-all text-on-surface-variant hover:text-on-surface hover:bg-surface-container-high"
+                            style={{ backgroundColor: isActive ? (metric === 'NMI' ? '#3b82f6' : metric === 'Silhouette' ? '#f59e0b' : '#6366f1') : '', color: isActive ? '#fff' : '' }}
+                          >
+                            {metric}
+                          </button>
+                        );
+                      })}
+                    </div>
                   </div>
-                </div>
+                )}
               </div>
 
               {/* Chart Bar List */}
-              <div className="space-y-4 max-w-3xl">
-                {overallPerf.map((perf, index) => {
-                  const score = metricTab === 'ARI' ? perf.avgARI : metricTab === 'NMI' ? perf.avgNMI : perf.avgSil;
-                  const percentage = Math.min(Math.max(score * 100, 0), 100);
-                  
-                  let barColorClass = 'bg-primary';
-                  if (metricTab === 'NMI') barColorClass = 'bg-secondary';
-                  if (metricTab === 'Silhouette') barColorClass = 'bg-tertiary';
+              {overallPerformanceExpanded && (
+                <div className="space-y-4 max-w-3xl animate-in fade-in duration-200">
+                  {overallPerf.map((perf, index) => {
+                    const score = metricTab === 'ARI' ? perf.avgARI : metricTab === 'NMI' ? perf.avgNMI : perf.avgSil;
+                    const percentage = Math.min(Math.max(score * 100, 0), 100);
+                    
+                    let barColorClass = 'bg-primary';
+                    if (metricTab === 'NMI') barColorClass = 'bg-secondary';
+                    if (metricTab === 'Silhouette') barColorClass = 'bg-tertiary';
 
-                  return (
-                    <div 
-                      key={perf.name} 
-                      className="group flex flex-col sm:flex-row sm:items-center justify-between gap-3 sm:gap-4 p-3.5 rounded-default border border-outline-border/40 bg-surface-container-low/20 hover:bg-primary-container/[0.03] hover:border-outline-border transition-all"
-                    >
-                      <div className="flex items-center gap-3 min-w-[200px] shrink-0">
-                        {/* Rank Badge */}
-                        <span className={`h-6.5 w-6.5 rounded-full flex items-center justify-center text-[10px] font-extrabold shrink-0 border ${
-                          index === 0 
-                            ? 'bg-tertiary-container/10 border-tertiary-container/30 text-tertiary' 
-                            : index === 1 
-                            ? 'bg-secondary-container text-on-secondary-container border-secondary-container/40' 
-                            : index === 2 
-                            ? 'bg-surface-container-high text-on-surface-variant border-outline' 
-                            : 'bg-surface-container-lowest text-on-surface-variant border-outline-border'
-                        }`}>
-                          {index === 0 ? (
-                            <Trophy className="h-3 w-3 text-tertiary" />
-                          ) : (
-                            index + 1
-                          )}
-                        </span>
-                        
-                        <div className="space-y-0.5 min-w-0">
-                          <h4 className="text-sm font-bold text-on-surface truncate flex items-center gap-1.5">
-                            <Cpu className="h-3.5 w-3.5 text-on-surface-variant/70 shrink-0" />
-                            {perf.name}
-                          </h4>
-                          <p className="text-[10px] text-on-surface-variant font-medium">
-                            {perf.datasetCount} {perf.datasetCount === 1 ? 'Dataset' : 'Datasets'} Benchmarked
-                          </p>
+                    return (
+                      <div 
+                        key={perf.name} 
+                        className="group flex flex-col sm:flex-row sm:items-center justify-between gap-3 sm:gap-4 p-3.5 rounded-default border border-outline-border/40 bg-surface-container-low/20 hover:bg-primary-container/[0.03] hover:border-outline-border transition-all"
+                      >
+                        <div className="flex items-center gap-3 min-w-[200px] shrink-0">
+                          {/* Rank Badge */}
+                          <span className={`h-6.5 w-6.5 rounded-full flex items-center justify-center text-[10px] font-extrabold shrink-0 border ${
+                            index === 0 
+                              ? 'bg-tertiary-container/10 border-tertiary-container/30 text-tertiary' 
+                              : index === 1 
+                              ? 'bg-secondary-container text-on-secondary-container border-secondary-container/40' 
+                              : index === 2 
+                              ? 'bg-surface-container-high text-on-surface-variant border-outline' 
+                              : 'bg-surface-container-lowest text-on-surface-variant border-outline-border'
+                          }`}>
+                            {index === 0 ? (
+                              <Trophy className="h-3 w-3 text-tertiary" />
+                            ) : (
+                              index + 1
+                            )}
+                          </span>
+                          
+                          <div className="space-y-0.5 min-w-0">
+                            <h4 className="text-sm font-bold text-on-surface truncate flex items-center gap-1.5">
+                              <Cpu className="h-3.5 w-3.5 text-on-surface-variant/70 shrink-0" />
+                              {perf.name}
+                            </h4>
+                            <p className="text-[10px] text-on-surface-variant font-medium">
+                              {perf.datasetCount} {perf.datasetCount === 1 ? 'Dataset' : 'Datasets'} Benchmarked
+                            </p>
+                          </div>
+                        </div>
+
+                        {/* Bar Gauge */}
+                        <div className="flex-1 w-full">
+                          <div className="h-3 bg-surface-container-low rounded-full overflow-hidden border border-outline-border/40 relative shadow-inner">
+                            <div 
+                              style={{ width: `${percentage}%` }}
+                              className={`h-full rounded-full transition-all duration-500 ease-out shadow-xs ${barColorClass}`}
+                            ></div>
+                          </div>
+                        </div>
+
+                        {/* Numeric Value */}
+                        <div className="min-w-[64px] text-right font-mono font-bold text-sm text-on-surface shrink-0">
+                          {score !== null && score !== undefined ? score.toFixed(3) : '0.000'}
                         </div>
                       </div>
-
-                      {/* Bar Gauge */}
-                      <div className="flex-1 w-full">
-                        <div className="h-3 bg-surface-container-low rounded-full overflow-hidden border border-outline-border/40 relative shadow-inner">
-                          <div 
-                            style={{ width: `${percentage}%` }}
-                            className={`h-full rounded-full transition-all duration-500 ease-out shadow-xs ${barColorClass}`}
-                          ></div>
-                        </div>
-                      </div>
-
-                      {/* Numeric Value */}
-                      <div className="min-w-[64px] text-right font-mono font-bold text-sm text-on-surface shrink-0">
-                        {score !== null && score !== undefined ? score.toFixed(3) : '0.000'}
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
+                    );
+                  })}
+                </div>
+              )}
             </div>
           )}
 
@@ -522,19 +545,44 @@ export default function Dashboard() {
                 {/* Visual anchor bar */}
                 <div className="absolute top-0 left-0 right-0 h-1 bg-gradient-to-r from-primary to-primary-container"></div>
                 
-                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6">
-                  <h2 className="text-xl md:text-2xl font-bold text-on-surface flex items-center gap-2.5 font-outfit">
-                    <span className="w-1.5 h-7 bg-primary-container rounded-full inline-block"></span>
-                    Dataset: {section.name}
-                  </h2>
-                  {section.groundTruth !== undefined && section.groundTruth !== null && (
-                    <span className="inline-flex items-center gap-1.5 px-3 py-1 bg-tertiary/10 border border-tertiary/20 rounded-full text-xs font-bold text-tertiary font-outfit uppercase shrink-0 w-fit">
-                      Ground Truth: {section.groundTruth} Clusters
-                    </span>
-                  )}
+                <div className="flex flex-row items-center justify-between gap-4 border-b border-outline-border/40 pb-4 mb-6">
+                  <div className="flex items-center gap-2.5 min-w-0">
+                    <span className="w-1.5 h-7 bg-primary-container rounded-full inline-block shrink-0"></span>
+                    <h2 className="text-xl md:text-2xl font-bold text-on-surface font-outfit truncate">
+                      Dataset: {section.name}
+                    </h2>
+                    {section.groundTruth !== undefined && section.groundTruth !== null && (
+                      <span className="hidden sm:inline-flex items-center gap-1.5 px-3 py-1 bg-tertiary/10 border border-tertiary/20 rounded-full text-xs font-bold text-tertiary font-outfit uppercase shrink-0">
+                        Ground Truth: {section.groundTruth} Clusters
+                      </span>
+                    )}
+                  </div>
+                  <div className="flex items-center gap-2.5 shrink-0">
+                    {section.groundTruth !== undefined && section.groundTruth !== null && (
+                      <span className="inline-flex sm:hidden items-center gap-1.5 px-2 py-0.5 bg-tertiary/10 border border-tertiary/20 rounded-full text-[10px] font-bold text-tertiary font-outfit uppercase shrink-0">
+                        K={section.groundTruth}
+                      </span>
+                    )}
+                    <button
+                      type="button"
+                      onClick={() => toggleSectionCollapse(section._id)}
+                      className="inline-flex items-center gap-1 px-3 py-1.5 bg-surface-container-low hover:bg-surface-container-high rounded-full text-xs font-bold text-on-surface-variant hover:text-on-surface border border-outline-border cursor-pointer transition-all active:scale-95 shrink-0"
+                    >
+                      {collapsedSections[section._id] ? (
+                        <>
+                          <ChevronDown className="h-4 w-4" /> Expand
+                        </>
+                      ) : (
+                        <>
+                          <ChevronUp className="h-4 w-4" /> Minimize
+                        </>
+                      )}
+                    </button>
+                  </div>
                 </div>
                 
-                <div className="overflow-x-auto rounded-default border border-outline-border bg-surface-container-lowest">
+                {!collapsedSections[section._id] && (
+                  <div className="overflow-x-auto rounded-default border border-outline-border bg-surface-container-lowest animate-in fade-in duration-200">
                   <table className="w-full text-left text-sm text-on-surface-variant border-collapse">
                     <thead className="bg-surface-container-low border-b border-outline-border text-xs uppercase font-semibold text-on-surface-variant tracking-wider font-outfit">
                       <tr>
@@ -694,9 +742,10 @@ export default function Dashboard() {
                     </tbody>
                   </table>
                 </div>
-              </div>
-            );
-          })}
+              )}
+            </div>
+          );
+        })}
         </div>
       )}
 
