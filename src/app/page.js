@@ -22,6 +22,7 @@ export default function Dashboard() {
   const [filterDropdownOpen, setFilterDropdownOpen] = useState(false);
   const filterDropdownRef = useRef(null);
   const hasInitializedFilter = useRef(false);
+  const searchRef = useRef(null);
 
   useEffect(() => {
     fetchGlobalData();
@@ -49,6 +50,41 @@ export default function Dashboard() {
     document.addEventListener('mousedown', handleClickOutside);
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, []);
+
+  const handleSearchChange = (e) => {
+    const value = e.target.value;
+    const oldVal = searchQuery;
+    setSearchQuery(value);
+    
+    if (value.trim().length > 0 && oldVal.trim().length === 0 && searchRef.current) {
+      const elementTop = searchRef.current.getBoundingClientRect().top + window.scrollY;
+      const targetY = elementTop - 96; // 96px offset to clear sticky header and add padding
+
+      // Premium custom smooth scroll animation with slow ease-in-out transition (1000ms)
+      const startY = window.scrollY;
+      const difference = targetY - startY;
+      const startTime = performance.now();
+      const duration = 1000; // 1 second slow scroll
+
+      function step(currentTime) {
+        const elapsed = currentTime - startTime;
+        const progress = Math.min(elapsed / duration, 1);
+        
+        // Quadratic Ease In Out
+        const ease = progress < 0.5 
+          ? 2 * progress * progress 
+          : -1 + (4 - 2 * progress) * progress;
+
+        window.scrollTo(0, startY + difference * ease);
+
+        if (progress < 1) {
+          requestAnimationFrame(step);
+        }
+      }
+
+      requestAnimationFrame(step);
+    }
+  };
 
   const toggleDatasetSelection = (id) => {
     setSelectedDatasets(prev => {
@@ -163,13 +199,13 @@ export default function Dashboard() {
 
       {/* Search Input Filter */}
       {!loading && nonEmptySections.length > 0 && (
-        <div className="max-w-md mx-auto relative px-4 w-full">
+        <div ref={searchRef} className="max-w-md mx-auto relative px-4 w-full">
           <div className="relative">
             <input
               type="text"
               placeholder="Search models or authors..."
               value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
+              onChange={handleSearchChange}
               className="w-full bg-surface-container-lowest border border-outline-border rounded-full pl-10 pr-4 py-2.5 text-sm text-on-surface focus:outline-none focus:border-primary focus:ring-2 focus:ring-primary/20 transition-all font-semibold shadow-xs"
             />
             <Search className="absolute left-3.5 top-3 h-4.5 w-4.5 text-on-surface-variant/70" />
